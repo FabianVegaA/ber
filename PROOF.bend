@@ -43,3 +43,12 @@ def Laws.merge_delete_modify_conflicts():
 
 def Laws.merge_modify_delete_conflicts():
   {==}
+
+def Laws.verify_accepts_recomputed():
+  {==}
+
+def Laws.verify_rejects_tampered_tree():
+  {==}
+
+def Laws.verify_rejects_empty_laws():
+  {==}

@@ -67,6 +67,50 @@ def success_commit_of(merge_result: MergeResult) -> Maybe<&2, History.Commit>:
     case MergeUnprovable{reason}:
       None{}
 
+def success_certificate_of(merge_result: MergeResult) -> Maybe<&2, MergeCertificate>:
+  match merge_result:
+    case MergeSuccess{resulting_commit, certificate}:
+      Some{certificate}
+    case MergeConflict{conflicting_keys}:
+      None{}
+    case MergeUnprovable{reason}:
+      None{}
+
+def cert_first_parent(certificate: MergeCertificate) -> String:
+  match certificate:
+    case Make{first_parent_commit, second_parent_commit, base_commit, result_tree_hash, strategy_name, checked_laws}:
+      first_parent_commit
+
+def cert_second_parent(certificate: MergeCertificate) -> String:
+  match certificate:
+    case Make{first_parent_commit, second_parent_commit, base_commit, result_tree_hash, strategy_name, checked_laws}:
+      second_parent_commit
+
+def cert_base_commit(certificate: MergeCertificate) -> String:
+  match certificate:
+    case Make{first_parent_commit, second_parent_commit, base_commit, result_tree_hash, strategy_name, checked_laws}:
+      base_commit
+
+def cert_result_tree(certificate: MergeCertificate) -> String:
+  match certificate:
+    case Make{first_parent_commit, second_parent_commit, base_commit, result_tree_hash, strategy_name, checked_laws}:
+      result_tree_hash
+
+def cert_strategy_name(certificate: MergeCertificate) -> String:
+  match certificate:
+    case Make{first_parent_commit, second_parent_commit, base_commit, result_tree_hash, strategy_name, checked_laws}:
+      strategy_name
+
+def cert_checked_laws(certificate: MergeCertificate) -> List<&2, LawCheck>:
+  match certificate:
+    case Make{first_parent_commit, second_parent_commit, base_commit, result_tree_hash, strategy_name, checked_laws}:
+      checked_laws
+
+def law_check_passed(law_check: LawCheck) -> Bool:
+  match law_check:
+    case Check{check_name, check_passed}:
+      check_passed
+
 def decide_contains_member(head_matches: Bool, recursive_result: Bool) -> Bool:
   match head_matches:
     case True{}:
