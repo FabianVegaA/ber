@@ -2,6 +2,7 @@ import Base
 import ./src/Reading.bend as Reading
 import ./src/LogicalKey.bend as LogicalKey
 import ./src/Comparison.bend as Comparison
+import ./src/Merging.bend as Merging
 
 # LAW 1, v0.1 instances: empty-history behavior, proven below (green gate).
 # Each pins a base case against regressions; none branches on key comparison,
@@ -48,3 +49,25 @@ law compare_singleton_empty_added_none:
   for entry_key: String
   for entry_value: String
   {Comparison.added_keys_of(Comparison.compare_sorted_entries(Con{Reading.make_entry(entry_key, entry_value), Nil{}}, Nil{})) == Nil{} : List<&2, LogicalKey.LogicalKey>}
+
+# LAW 3 FAMILY, v0.1 instances (Task 6): merge truth-table pins on CONCRETE
+# keys/values. Every String.eq fully reduces on literals, so all hold by
+# computation ({==}) — the bend-json "concrete regression example" pattern.
+# Universal idempotence/commutativity need the eq-lemma epic (deferred).
+law merge_no_changes_keep:
+  {Merging.merge_entry_lists(Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Nil{}}, Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Nil{}}, Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Nil{}}) == Merging.MergedEntries{Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Nil{}}} : Merging.MergeOutcome}
+
+law merge_disjoint_union:
+  {Merging.merge_entry_lists(Nil{}, Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Nil{}}, Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}) == Merging.MergedEntries{Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}}} : Merging.MergeOutcome}
+
+law merge_same_key_conflict:
+  {Merging.merge_entry_lists(Nil{}, Con{Reading.make_entry("ledger/record_first", "version_one"), Nil{}}, Con{Reading.make_entry("ledger/record_first", "version_two"), Nil{}}) == Merging.ConflictingKeys{Con{LogicalKey.split_combined_key("ledger/record_first"), Nil{}}} : Merging.MergeOutcome}
+
+law merge_delete_unchanged_drops:
+  {Merging.merge_entry_lists(Con{Reading.make_entry("ledger/record_first", "version_one"), Nil{}}, Nil{}, Con{Reading.make_entry("ledger/record_first", "version_one"), Nil{}}) == Merging.MergedEntries{Nil{}} : Merging.MergeOutcome}
+
+law merge_delete_modify_conflicts:
+  {Merging.merge_entry_lists(Con{Reading.make_entry("ledger/record_first", "version_one"), Nil{}}, Nil{}, Con{Reading.make_entry("ledger/record_first", "version_two"), Nil{}}) == Merging.ConflictingKeys{Con{LogicalKey.split_combined_key("ledger/record_first"), Nil{}}} : Merging.MergeOutcome}
+
+law merge_modify_delete_conflicts:
+  {Merging.merge_entry_lists(Con{Reading.make_entry("ledger/record_first", "version_one"), Nil{}}, Con{Reading.make_entry("ledger/record_first", "version_two"), Nil{}}, Nil{}) == Merging.ConflictingKeys{Con{LogicalKey.split_combined_key("ledger/record_first"), Nil{}}} : Merging.MergeOutcome}

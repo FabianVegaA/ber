@@ -25,3 +25,21 @@ def Laws.compare_singleton_empty_removed_single(entry_key, entry_value):
 
 def Laws.compare_singleton_empty_added_none(entry_key, entry_value):
   {==}
+
+def Laws.merge_no_changes_keep():
+  {==}
+
+def Laws.merge_disjoint_union():
+  {==}
+
+def Laws.merge_same_key_conflict():
+  {==}
+
+def Laws.merge_delete_unchanged_drops():
+  {==}
+
+def Laws.merge_delete_modify_conflicts():
+  {==}
+
+def Laws.merge_modify_delete_conflicts():
+  {==}
