@@ -1,5 +1,7 @@
 import Base
 import ./src/Reading.bend as Reading
+import ./src/LogicalKey.bend as LogicalKey
+import ./src/Comparison.bend as Comparison
 
 # LAW 1, v0.1 instances: empty-history behavior, proven below (green gate).
 # Each pins a base case against regressions; none branches on key comparison,
@@ -20,3 +22,29 @@ law resolve_none_stable:
 
 law normalize_nil_stable:
   {Reading.normalize_chain(Nil{}) == Nil{} : List<&2, Reading.ChainEntry>}
+
+# LAW 2 FAMILY, v0.1 instances (Task 5): diff boundary behavior, no key
+# comparison evaluated on these shapes, so all hold by computation.
+# General reflexivity/symmetry need the eq-lemma epic (deferred, like Law 1).
+law compare_empty_empty:
+  {Comparison.compare_sorted_entries(Nil{}, Nil{}) == Comparison.Make{Nil{}, Nil{}, Nil{}, 0n, 0n} : Comparison.CompareResult}
+
+law compare_empty_singleton_added_single:
+  for entry_key: String
+  for entry_value: String
+  {List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(Comparison.compare_sorted_entries(Nil{}, Con{Reading.make_entry(entry_key, entry_value), Nil{}}))) == 1n : Nat}
+
+law compare_empty_singleton_removed_none:
+  for entry_key: String
+  for entry_value: String
+  {Comparison.removed_keys_of(Comparison.compare_sorted_entries(Nil{}, Con{Reading.make_entry(entry_key, entry_value), Nil{}})) == Nil{} : List<&2, LogicalKey.LogicalKey>}
+
+law compare_singleton_empty_removed_single:
+  for entry_key: String
+  for entry_value: String
+  {List.length(&2, LogicalKey.LogicalKey, Comparison.removed_keys_of(Comparison.compare_sorted_entries(Con{Reading.make_entry(entry_key, entry_value), Nil{}}, Nil{}))) == 1n : Nat}
+
+law compare_singleton_empty_added_none:
+  for entry_key: String
+  for entry_value: String
+  {Comparison.added_keys_of(Comparison.compare_sorted_entries(Con{Reading.make_entry(entry_key, entry_value), Nil{}}, Nil{})) == Nil{} : List<&2, LogicalKey.LogicalKey>}
