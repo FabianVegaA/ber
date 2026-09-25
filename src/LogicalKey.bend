@@ -22,3 +22,10 @@ def build_index_storage_key(namespace_name: String, record_identifier: String, c
 
 def build_stage_storage_key(session_identifier: String, namespace_name: String, record_identifier: String) -> String:
   "stage/" ++ session_identifier ++ "/" ++ namespace_name ++ "/" ++ record_identifier
+
+# Combined-key spellings (same layout, for code holding "namespace/record" as one string).
+def build_version_index_key(combined_key: String, commit_identifier: String) -> String:
+  "index/" ++ combined_key ++ "/" ++ commit_identifier
+
+def build_stage_storage_key_combined(session_identifier: String, combined_key: String) -> String:
+  "stage/" ++ session_identifier ++ "/" ++ combined_key

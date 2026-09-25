@@ -78,3 +78,18 @@ def normalize_chain(ancestor_chain: List<&2, ChainEntry>) -> List<&2, ChainEntry
       Nil{}
     case Con{head_entry, remaining_chain}:
       attach_head(head_entry, normalize_chain(remaining_chain))
+
+# Shared vocabulary: other modules build/inspect ChainEntry through THESE
+# (foreign-module constructor patterns are avoided on purpose).
+def make_entry(entry_key: String, entry_value: String) -> ChainEntry:
+  Entry{entry_key, entry_value}
+
+def entry_key_of(chain_entry: ChainEntry) -> String:
+  match chain_entry:
+    case Entry{entry_key, entry_value}:
+      entry_key
+
+def entry_value_of(chain_entry: ChainEntry) -> String:
+  match chain_entry:
+    case Entry{entry_key, entry_value}:
+      entry_value
