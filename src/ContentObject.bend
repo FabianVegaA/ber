@@ -2,7 +2,7 @@ import Base
 import ./ContentHash.bend as ContentHash
 import ./LogicalKey.bend as LogicalKey
 import ./MyLsmBinding.bend as Binding
-import 0x7279d7e59732e720723bbd4a452d447a/mylsm.bend as MyLsmStore
+import 0x8bf6d41adbe0e67e438f6cdc25a6cb6e/mylsm.bend as MyLsmStore
 import 0xf776c27e08f75fc19a070c691bcbb111/json.bend as JsonLib
 
 # Content-addressed objects. Canonical JSON (sort_keys) is THE serialization:

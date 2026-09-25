@@ -3,8 +3,8 @@ import ../src/Staging.bend as Staging
 import ../src/History.bend as History
 import ../src/Comparison.bend as Comparison
 import ../src/LogicalKey.bend as LogicalKey
-import 0x7279d7e59732e720723bbd4a452d447a/mylsm.bend as MyLsmStore
-import 0x7279d7e59732e720723bbd4a452d447a/src/Db.bend as DbTypes
+import 0x8bf6d41adbe0e67e438f6cdc25a6cb6e/mylsm.bend as MyLsmStore
+import 0x8bf6d41adbe0e67e438f6cdc25a6cb6e/src/Db.bend as DbTypes
 
 def flag_text(check_name: String, condition: Bool) -> String:
   match condition:
