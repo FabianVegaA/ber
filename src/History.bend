@@ -330,3 +330,103 @@ def create_commit(+session_identifier: String, +parent_commit_identifiers: List<
     base_entries : List<&2, Reading.ChainEntry> <- load_base_entries(parent_commit_identifiers)
     finished_commit : Commit <- materialize_commit(session_identifier, parent_commit_identifiers, metadata, StateTree.merge_sorted_entries(staged_pairs, base_entries))
     return finished_commit
+
+# ---- Versioned reads (Task 4) ----
+# Chain walk is fuel-first (fuel decrements in argument position 1, so the
+# termination checker accepts it). Unknown commits contribute "" links that
+# can never match a real index key — lookups simply skip them.
+
+def commit_parents_of(commit_value: Commit) -> List<&2, String>:
+  match commit_value:
+    case Make{commit_identifier, parent_commit_identifiers, tree_hash, timestamp, metadata, certificate_hash}:
+      parent_commit_identifiers
+
+def empty_string_list() -> MyLsmStore.Sess<&2, List<&2, String>>:
+  do MyLsmStore.Sess<&2, List<&2, String>>:
+    return Nil{}
+
+def empty_entry_maybe() -> MyLsmStore.Sess<&2, Maybe<&2, Reading.ChainEntry>>:
+  do MyLsmStore.Sess<&2, Maybe<&2, Reading.ChainEntry>>:
+    return None{}
+
+def empty_string_maybe() -> MyLsmStore.Sess<&2, Maybe<&2, String>>:
+  do MyLsmStore.Sess<&2, Maybe<&2, String>>:
+    return None{}
+
+def first_parent_name(parent_identifiers: List<&2, String>) -> String:
+  match parent_identifiers:
+    case Nil{}:
+      ""
+    case Con{head_parent, remaining_parents}:
+      head_parent
+
+def first_parent_text(commit_maybe: Maybe<&2, Commit>) -> String:
+  match commit_maybe:
+    case None{}:
+      ""
+    case Some{found_commit}:
+      first_parent_name(commit_parents_of(found_commit))
+
+def walk_commit_chain(remaining_fuel: Nat, +commit_identifier: String) -> MyLsmStore.Sess<&2, List<&2, String>>:
+  match remaining_fuel:
+    case 0n:
+      empty_string_list()
+    case 1n+fuel_left:
+      do MyLsmStore.Sess<&2, List<&2, String>>:
+        commit_maybe : Maybe<&2, Commit> <- load_commit(commit_identifier)
+        tail_chain : List<&2, String> <- walk_commit_chain(fuel_left, first_parent_text(commit_maybe))
+        return Con{commit_identifier, tail_chain}
+
+def decide_search_hit(stored_maybe: Maybe<&2, String>, +lookup_key: String, tail_result: Maybe<&2, Reading.ChainEntry>) -> Maybe<&2, Reading.ChainEntry>:
+  match stored_maybe:
+    case None{}:
+      tail_result
+    case Some{stored_value}:
+      Some{Reading.make_entry(lookup_key, stored_value)}
+
+def search_chain_entries(ancestor_chain: List<&2, String>, +namespace_name: String, +record_identifier: String) -> MyLsmStore.Sess<&2, Maybe<&2, Reading.ChainEntry>>:
+  match ancestor_chain:
+    case Nil{}:
+      empty_entry_maybe()
+    case Con{head_commit, remaining_commits}:
+      do MyLsmStore.Sess<&2, Maybe<&2, Reading.ChainEntry>>:
+        +lookup_key : String = Reading.encode_lookup_key(namespace_name, record_identifier)
+        stored_maybe : Maybe<&2, String> <- Binding.load_value(LogicalKey.build_version_index_key(lookup_key, head_commit))
+        tail_result : Maybe<&2, Reading.ChainEntry> <- search_chain_entries(remaining_commits, namespace_name, record_identifier)
+        return decide_search_hit(stored_maybe, lookup_key, tail_result)
+
+def payload_or_empty(loaded_maybe: Maybe<&2, ContentObject.ContentObject>) -> Maybe<&2, String>:
+  match loaded_maybe:
+    case None{}:
+      None{}
+    case Some{loaded_object}:
+      Some{ContentObject.object_payload_of(loaded_object)}
+
+def load_object_payload(+value_hash: String) -> MyLsmStore.Sess<&2, Maybe<&2, String>>:
+  do MyLsmStore.Sess<&2, Maybe<&2, String>>:
+    loaded_maybe : Maybe<&2, ContentObject.ContentObject> <- ContentObject.load_content_object(value_hash)
+    return payload_or_empty(loaded_maybe)
+
+def decide_resolve_value(is_tombstone: Bool, +stored_value: String) -> MyLsmStore.Sess<&2, Maybe<&2, String>>:
+  match is_tombstone:
+    case True{}:
+      empty_string_maybe()
+    case False{}:
+      load_object_payload(stored_value)
+
+def resolve_entry_value(+stored_value: String) -> MyLsmStore.Sess<&2, Maybe<&2, String>>:
+  decide_resolve_value(String.eq(stored_value, "TOMBSTONE"), stored_value)
+
+def resolve_found_entry(found_maybe: Maybe<&2, Reading.ChainEntry>) -> MyLsmStore.Sess<&2, Maybe<&2, String>>:
+  match found_maybe:
+    case None{}:
+      empty_string_maybe()
+    case Some{found_entry}:
+      resolve_entry_value(Reading.entry_value_of(found_entry))
+
+def read_value_at(+namespace_name: String, +record_identifier: String, +commit_identifier: String) -> MyLsmStore.Sess<&2, Maybe<&2, String>>:
+  do MyLsmStore.Sess<&2, Maybe<&2, String>>:
+    ancestor_chain : List<&2, String> <- walk_commit_chain(10000n, commit_identifier)
+    found_entry : Maybe<&2, Reading.ChainEntry> <- search_chain_entries(ancestor_chain, namespace_name, record_identifier)
+    resolved_value : Maybe<&2, String> <- resolve_found_entry(found_entry)
+    return resolved_value

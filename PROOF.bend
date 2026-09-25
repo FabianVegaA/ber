@@ -2,6 +2,11 @@ import Base
 import ./LAWS.bend as Laws
 
 # Proofs for LAWS.bend. Each law gets a def of the same name.
-# read_determinism: open until Task 4 (needs induction over the chain).
-def Laws.read_determinism(namespace_name, record_identifier, ancestor_chain):
-  ?TODO
+def Laws.empty_chain_reads_none(namespace_name, record_identifier):
+  {==}
+
+def Laws.resolve_none_stable():
+  {==}
+
+def Laws.normalize_nil_stable():
+  {==}

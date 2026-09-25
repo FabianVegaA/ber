@@ -120,3 +120,8 @@ def load_content_object(+content_hash: String) -> MyLsmStore.Sess<&2, Maybe<&2, 
   do MyLsmStore.Sess<&2, Maybe<&2, ContentObject>>:
     stored_maybe : Maybe<&2, String> <- Binding.load_value(LogicalKey.build_object_storage_key(content_hash))
     return parse_loaded_object(content_hash, stored_maybe)
+
+def object_payload_of(content_object: ContentObject) -> String:
+  match content_object:
+    case Make{content_hash, payload, references}:
+      payload
