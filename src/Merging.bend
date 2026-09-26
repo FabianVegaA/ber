@@ -116,6 +116,22 @@ def law_check_passed(law_check: LawCheck) -> Bool:
     case Check{check_name, check_passed}:
       check_passed
 
+# Projects merged entries; conflicts project as empty.
+def merged_entries_of(merge_outcome: MergeOutcome) -> List<&2, Reading.ChainEntry>:
+  match merge_outcome:
+    case MergedEntries{merged_entries}:
+      merged_entries
+    case ConflictingKeys{conflicting_keys}:
+      Nil{}
+
+# Projects conflicting keys; merges project as empty.
+def conflicting_keys_of(merge_outcome: MergeOutcome) -> List<&2, LogicalKey.LogicalKey>:
+  match merge_outcome:
+    case MergedEntries{merged_entries}:
+      Nil{}
+    case ConflictingKeys{conflicting_keys}:
+      conflicting_keys
+
 # True short-circuits the membership scan.
 def decide_contains_member(head_matches: Bool, recursive_result: Bool) -> Bool:
   match head_matches:

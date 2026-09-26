@@ -96,3 +96,84 @@ def Laws.string_eq_refl(text):
 
 def Laws.word_cmp_refl(width, word):
   EqTheory.word_cmp_refl(width, word)
+
+def Laws.adapter_canonical_bytes():
+  {==}
+
+def Laws.adapter_missing_none():
+  {==}
+
+def Laws.adapter_parse_roundtrip():
+  {==}
+
+def Laws.value_text_roundtrip():
+  {==}
+
+def Laws.value_object_roundtrip():
+  {==}
+
+def Laws.value_blob_roundtrip():
+  {==}
+
+def Laws.value_injective_text_object():
+  {==}
+
+def Laws.value_injective_text_blob():
+  {==}
+
+def Laws.value_injective_object_blob():
+  {==}
+
+def Laws.key_encode_logical():
+  {==}
+
+def Laws.key_object_storage():
+  {==}
+
+def Laws.key_index_storage():
+  {==}
+
+def Laws.key_stage_storage():
+  {==}
+
+def Laws.hash_known_answer_abc():
+  {==}
+
+def Laws.hash_distinct_hello_world():
+  {==}
+
+def Laws.fanout_seq_added_one():
+  {==}
+
+def Laws.fanout_seq_removed_one():
+  {==}
+
+def Laws.fanout_seq_modified_one():
+  {==}
+
+def Laws.fanout_agree_added():
+  {==}
+
+def Laws.fanout_agree_removed():
+  {==}
+
+def Laws.fanout_agree_modified():
+  {==}
+
+def Laws.compare_branch_added_one():
+  {==}
+
+def Laws.compare_branch_removed_one():
+  {==}
+
+def Laws.compare_branch_modified_none():
+  {==}
+
+def Laws.compare_pruned_self():
+  {==}
+
+def Laws.merge_branch_count_three():
+  {==}
+
+def Laws.merge_conflict_count_one():
+  {==}
