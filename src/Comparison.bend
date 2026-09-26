@@ -118,6 +118,84 @@ def changed_pairs(+second_entries: List<&2, Reading.ChainEntry>, first_entries: 
 def compare_sorted_entries(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> CompareResult:
   Make{second_only_entries(first_entries, second_entries), first_only_entries(second_entries, first_entries), changed_pairs(second_entries, first_entries), 0n, Nat.add(List.length(&2, Reading.ChainEntry, first_entries), List.length(&2, Reading.ChainEntry, second_entries))}
 
+# --- v0.3 parallel fan-out ---
+# Alternating split (balanced for ANY key distribution — halves differ by at
+# most one element), two independent membership-compares via parallel `let`,
+# union by append. Order of added/removed/modified lists is NOT canonical
+# across paths (evens-then-odds vs scan order) — COUNTS and SETS agree, order
+# doesn't. Downstream merge sorts before hashing, so order never leaks into
+# tree hashes. Equivalence fanned==sequential is behavioral (counts), NOT
+# proven — general set-equality needs the eq-lemma epic.
+
+def split_step(entries: List<&2, Reading.ChainEntry>, take_head: Bool, evens_accum: List<&2, Reading.ChainEntry>, odds_accum: List<&2, Reading.ChainEntry>) -> List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>:
+  match entries:
+    case Nil{}:
+      (List.reverse(&2, Reading.ChainEntry, evens_accum), List.reverse(&2, Reading.ChainEntry, odds_accum))
+    case Con{head_entry, remaining_entries}:
+      match take_head:
+        case True{}:
+          split_step(remaining_entries, False{}, Con{head_entry, evens_accum}, odds_accum)
+        case False{}:
+          split_step(remaining_entries, True{}, evens_accum, Con{head_entry, odds_accum})
+
+def split_entries(+source_entries: List<&2, Reading.ChainEntry>) -> List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>:
+  split_step(source_entries, True{}, Nil{}, Nil{})
+
+# (union_compare_results removed: per-half full-compares are semantically
+# wrong for membership diffs — see fan_*_entries above.)
+
+def fan_added_halves(even_entries: List<&2, Reading.ChainEntry>, odd_entries: List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
+  even_added odd_added = second_only_entries(reference_entries, even_entries) second_only_entries(reference_entries, odd_entries)
+  List.append(&2, LogicalKey.LogicalKey, even_added, odd_added)
+
+def fan_out_pair(split_pair: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
+  match split_pair:
+    case (even_entries, odd_entries):
+      fan_added_halves(even_entries, odd_entries, reference_entries)
+
+def fan_added_entries(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
+  fan_out_pair(split_entries(second_entries), first_entries)
+
+def fan_removed_halves(even_entries: List<&2, Reading.ChainEntry>, odd_entries: List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
+  even_removed odd_removed = first_only_entries(reference_entries, even_entries) first_only_entries(reference_entries, odd_entries)
+  List.append(&2, LogicalKey.LogicalKey, even_removed, odd_removed)
+
+def fan_out_removed(split_pair: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
+  match split_pair:
+    case (even_entries, odd_entries):
+      fan_removed_halves(even_entries, odd_entries, reference_entries)
+
+def fan_removed_entries(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
+  fan_out_removed(split_entries(first_entries), second_entries)
+
+def fan_modified_halves(even_entries: List<&2, Reading.ChainEntry>, odd_entries: List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, ModifiedEntry>:
+  even_modified odd_modified = changed_pairs(reference_entries, even_entries) changed_pairs(reference_entries, odd_entries)
+  List.append(&2, ModifiedEntry, even_modified, odd_modified)
+
+def fan_out_modified(split_pair: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, ModifiedEntry>:
+  match split_pair:
+    case (even_entries, odd_entries):
+      fan_modified_halves(even_entries, odd_entries, reference_entries)
+
+def fan_modified_entries(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> List<&2, ModifiedEntry>:
+  fan_out_modified(split_entries(first_entries), second_entries)
+
+def compare_entries_fanned(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> CompareResult:
+  Make{fan_added_entries(first_entries, second_entries), fan_removed_entries(first_entries, second_entries), fan_modified_entries(first_entries, second_entries), 0n, Nat.add(List.length(&2, Reading.ChainEntry, first_entries), List.length(&2, Reading.ChainEntry, second_entries))}
+
+def comparison_parallel_threshold() -> Nat:
+  1024n
+
+def decide_fan_out(is_large: Bool, +first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> CompareResult:
+  match is_large:
+    case True{}:
+      compare_entries_fanned(first_entries, second_entries)
+    case False{}:
+      compare_sorted_entries(first_entries, second_entries)
+
+def compare_entries_auto(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> CompareResult:
+  decide_fan_out(Nat.is_ge(List.length(&2, Reading.ChainEntry, first_entries), comparison_parallel_threshold()), first_entries, second_entries)
+
 def entries_or_empty(tree_maybe: Maybe<&2, StateTree.StateTreeNode>) -> List<&2, Reading.ChainEntry>:
   match tree_maybe:
     case None{}:
@@ -138,14 +216,14 @@ def pruned_result(first_entries: List<&2, Reading.ChainEntry>, second_entries: L
 def pruned_or_present(second_maybe: Maybe<&2, StateTree.StateTreeNode>, first_entries: List<&2, Reading.ChainEntry>) -> CompareResult:
   match second_maybe:
     case None{}:
-      compare_sorted_entries(first_entries, Nil{})
+      compare_entries_auto(first_entries, Nil{})
     case Some{second_tree}:
       pruned_result(first_entries, StateTree.tree_entries(second_tree))
 
 def pruned_or_empty(first_maybe: Maybe<&2, StateTree.StateTreeNode>, second_maybe: Maybe<&2, StateTree.StateTreeNode>) -> CompareResult:
   match first_maybe:
     case None{}:
-      compare_sorted_entries(Nil{}, entries_or_empty(second_maybe))
+      compare_entries_auto(Nil{}, entries_or_empty(second_maybe))
     case Some{first_tree}:
       pruned_or_present(second_maybe, StateTree.tree_entries(first_tree))
 
@@ -154,7 +232,7 @@ def dispatch_tree_hashes(hashes_equal: Bool, +first_maybe: Maybe<&2, StateTree.S
     case True{}:
       pruned_or_empty(first_maybe, second_maybe)
     case False{}:
-      compare_sorted_entries(entries_or_empty(first_maybe), entries_or_empty(second_maybe))
+      compare_entries_auto(entries_or_empty(first_maybe), entries_or_empty(second_maybe))
 
 def compare_loaded_trees(+first_maybe: Maybe<&2, StateTree.StateTreeNode>, +second_maybe: Maybe<&2, StateTree.StateTreeNode>) -> CompareResult:
   dispatch_tree_hashes(String.eq(hash_or_empty(first_maybe), hash_or_empty(second_maybe)), first_maybe, second_maybe)
