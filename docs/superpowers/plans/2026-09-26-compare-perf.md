@@ -14,6 +14,8 @@
 
 **Bench protocol (every measurement):** build once (`bend benches/compare_bench.bend -o /tmp/compare_bench_bin`), matrix N={1000,10000} × {sequential,fanned} with `--threads 8`, `/usr/bin/time -p`, single samples; record wall/user + counts agreement in Measurements below.
 
+**Bench gate rule (every task):** no commit closes a task without running the bench matrix FIRST and recording improvement or worsening in Measurements with a one-line verdict. The numbers go in the commit message (`10k wall 114.8s → 61.2s (1.9x)`, `no change`, or `regression accepted: <reason>`). A regression never lands silently; if one lands, the written reason is part of the commit.
+
 ---
 
 ### Task 1: Private per-lane copies
@@ -55,10 +57,10 @@ def fan_added_halves(even_entries: List<&2, Reading.ChainEntry>, odd_entries: Li
   List.append(&2, LogicalKey.LogicalKey, even_added, odd_added)
 ```
 
-- [ ] **Step 3: Gate + bench + record**
+- [ ] **Step 3: Gate + bench + record (bench gate rule: no commit without numbers + verdict)**
 
 Run: `bend PROOF.bend` → `All terms check.` (the 6 agreement laws pin preservation).
-Run: full bench matrix per protocol; append table to Measurements with wall/user per cell + speedup vs baseline §1.
+Run: full bench matrix per protocol; append table to Measurements with wall/user per cell + speedup vs baseline §1 + one-line verdict (improved / unchanged / regressed + reason).
 Expected on theory: 10k wall toward ~60s. If unmoved: theory dead — record it and skip to Epic.
 
 - [ ] **Step 4: Commit**
@@ -84,9 +86,9 @@ def comparison_parallel_threshold() -> Nat:
 
 (Replace `4096n` with the measured crossover; candidates 4096/8192. No law pins this value — verify with `rg -n "comparison_parallel_threshold" LAWS.bend` → no hits before changing.)
 
-- [ ] **Step 2: Gate + spot bench + commit**
+- [ ] **Step 2: Gate + spot bench + commit (bench gate rule applies)**
 
-Run: `bend PROOF.bend` → green; bench N={1000,10000} fanned to confirm no loss zone.
+Run: `bend PROOF.bend` → green; bench N={1000,10000} fanned to confirm no loss zone; record numbers + verdict in Measurements; numbers go in the commit message.
 ```bash
 git add src/Comparison.bend
 git commit -m "perf(ber-core): retune parallel threshold to measured crossover"
@@ -114,7 +116,7 @@ def fan_added_quarters(first_quarter: List<&2, Reading.ChainEntry>, second_quart
 
 Mirror for removed/modified. Route `compare_entries_fanned` through quarters when above a 4-way floor (reuse threshold × 4), keep 2-way between threshold and floor.
 
-- [ ] **Step 2: Laws (agreement quarters-vs-sequential counts on the fanout fixture) + proofs, gate, bench, record, commit**
+- [ ] **Step 2: Laws (agreement quarters-vs-sequential counts on the fanout fixture) + proofs, gate, bench, record, commit (bench gate rule applies: numbers + verdict before commit)**
 
 New laws `fanout_quarters_agree_{added,removed,modified}` (Nat equations, same fixture as the 2-way agreement laws).
 
@@ -142,9 +144,9 @@ Laws (concrete, `{==}`): `sort_fixture_sorted` (output EQUALS the hand-sorted li
 
 Vendor the demo algorithm into `vendor/bitonic/` (it is NOT a hub package — no import possible), adapt: `String.cmp` in `mix`, list→padded-tree with an explicit max-key sentinel, tree→list unpadding. Document the sentinel choice and its exclusion from counts. Same laws as Variant A, same fixtures.
 
-- [ ] **Step 3: Bench both + decide + record**
+- [ ] **Step 3: Bench both + decide + record (bench gate rule applies: the decision IS the verdict)**
 
-Matrix from the protocol on both variants + current path. Winner rule: wall first; within 10%, fewer laws/code wins. Loser deleted in the same commit (no dead variants). Record the decision with numbers.
+Matrix from the protocol on both variants + current path. Winner rule: wall first; within 10%, fewer laws/code wins. Loser deleted in the same commit (no dead variants). Record the decision with numbers; numbers go in the commit message.
 
 ---
 
