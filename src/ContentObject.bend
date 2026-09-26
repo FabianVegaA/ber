@@ -1,7 +1,6 @@
 import Base
 import ./ContentHash.bend as ContentHash
 import ./LogicalKey.bend as LogicalKey
-import ./MyLsmBinding.bend as Binding
 import ./JsonAdapter.bend as JsonAdapter
 import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
 import bend-kit-json@0.3.0.0/json.bend as Json
@@ -30,7 +29,7 @@ def canonical_content(payload: String, references: List<&2, String>) -> String:
 
 def finish_store(+content_hash: String, +canonical_text: String) -> MyLsmStore.Sess<&2, String>:
   do MyLsmStore.Sess<&2, String>:
-    stored_unit : Unit <- Binding.store_value(LogicalKey.build_object_storage_key(content_hash), canonical_text)
+    stored_unit : Unit <- MyLsmStore.sput(LogicalKey.build_object_storage_key(content_hash), canonical_text)
     return content_hash
 
 def wrap_store(+canonical_text: String) -> MyLsmStore.Sess<&2, String>:
@@ -119,7 +118,7 @@ def parse_loaded_object(content_hash: String, stored_maybe: Maybe<&2, String>) -
 # None on missing or malformed stored text; never returns a corrupt object.
 def load_content_object(+content_hash: String) -> MyLsmStore.Sess<&2, Maybe<&2, ContentObject>>:
   do MyLsmStore.Sess<&2, Maybe<&2, ContentObject>>:
-    stored_maybe : Maybe<&2, String> <- Binding.load_value(LogicalKey.build_object_storage_key(content_hash))
+    stored_maybe : Maybe<&2, String> <- MyLsmStore.sget(LogicalKey.build_object_storage_key(content_hash))
     return parse_loaded_object(content_hash, stored_maybe)
 
 def object_payload_of(content_object: ContentObject) -> String:

@@ -187,12 +187,6 @@ def find_first_common(+ancestor_set: List<&2, String>, remaining_fuel: Nat, +com
         tail_result : Maybe<&2, String> <- find_first_common(ancestor_set, fuel_left, History.first_parent_text(commit_maybe))
         return decide_lca_found(list_contains_member(commit_identifier, ancestor_set), commit_identifier, tail_result)
 
-def find_common_ancestor(+first_identifier: String, +second_identifier: String) -> MyLsmStore.Sess<&2, Maybe<&2, String>>:
-  do MyLsmStore.Sess<&2, Maybe<&2, String>>:
-    ancestor_set : List<&2, String> <- collect_ancestors(10000n, Con{first_identifier, Nil{}}, Nil{})
-    lca_result : Maybe<&2, String> <- find_first_common(ancestor_set, 10000n, second_identifier)
-    return lca_result
-
 def keep_first_entry(+combined_key: String, +entry_value: String, tail_outcome: MergeOutcome) -> MergeOutcome:
   match tail_outcome:
     case ConflictingKeys{conflicting_keys}:

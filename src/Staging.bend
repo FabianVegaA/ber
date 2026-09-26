@@ -1,7 +1,6 @@
 import Base
 import ./LogicalKey.bend as LogicalKey
 import ./ContentObject.bend as ContentObject
-import ./MyLsmBinding.bend as Binding
 import ./JsonAdapter.bend as JsonAdapter
 import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
 import bend-kit-json@0.3.0.0/json.bend as Json
@@ -72,15 +71,15 @@ def add_key_unless_present(+target_key: String, +staged_keys: List<&2, String>) 
 
 def load_stage_index(+session_identifier: String) -> MyLsmStore.Sess<&2, List<&2, String>>:
   do MyLsmStore.Sess<&2, List<&2, String>>:
-    stored_maybe : Maybe<&2, String> <- Binding.load_value(stage_index_key(session_identifier))
+    stored_maybe : Maybe<&2, String> <- MyLsmStore.sget(stage_index_key(session_identifier))
     return parse_stage_index(stored_maybe)
 
 def record_stage_entry(+session_identifier: String, +namespace_name: String, +record_identifier: String, value_hash: String) -> MyLsmStore.Sess<&2, LogicalKey.LogicalKey>:
   do MyLsmStore.Sess<&2, LogicalKey.LogicalKey>:
     +full_key_text : String = LogicalKey.encode_logical_key(LogicalKey.Make{namespace_name, record_identifier})
     current_index : List<&2, String> <- load_stage_index(session_identifier)
-    stored_unit : Unit <- Binding.store_value(LogicalKey.build_stage_storage_key(session_identifier, namespace_name, record_identifier), value_hash)
-    saved_unit : Unit <- Binding.store_value(stage_index_key(session_identifier), serialize_key_list(add_key_unless_present(full_key_text, current_index)))
+    stored_unit : Unit <- MyLsmStore.sput(LogicalKey.build_stage_storage_key(session_identifier, namespace_name, record_identifier), value_hash)
+    saved_unit : Unit <- MyLsmStore.sput(stage_index_key(session_identifier), serialize_key_list(add_key_unless_present(full_key_text, current_index)))
     return LogicalKey.Make{namespace_name, record_identifier}
 
 def put_record(+session_identifier: String, +namespace_name: String, +record_identifier: String, value: String) -> MyLsmStore.Sess<&2, LogicalKey.LogicalKey>:

@@ -5,7 +5,6 @@ import ./ContentHash.bend as ContentHash
 import ./StateTree.bend as StateTree
 import ./Staging.bend as Staging
 import ./ContentObject.bend as ContentObject
-import ./MyLsmBinding.bend as Binding
 import ./JsonAdapter.bend as JsonAdapter
 import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
 import bend-kit-json@0.3.0.0/json.bend as Json
@@ -188,7 +187,7 @@ def parse_commit(requested_identifier: String, stored_maybe: Maybe<&2, String>) 
 
 def load_commit(+requested_identifier: String) -> MyLsmStore.Sess<&2, Maybe<&2, Commit>>:
   do MyLsmStore.Sess<&2, Maybe<&2, Commit>>:
-    stored_maybe : Maybe<&2, String> <- Binding.load_value(LogicalKey.build_commit_storage_key(requested_identifier))
+    stored_maybe : Maybe<&2, String> <- MyLsmStore.sget(LogicalKey.build_commit_storage_key(requested_identifier))
     return parse_commit(requested_identifier, stored_maybe)
 
 def empty_unit() -> MyLsmStore.Sess<&2, Unit>:
@@ -207,13 +206,13 @@ def persist_commit(+parent_commit_identifiers: List<&2, String>, +metadata: List
   do MyLsmStore.Sess<&2, Commit>:
     +commit_text : String = serialize_commit(parent_commit_identifiers, metadata, tree_hash_value)
     +commit_identifier : String = ContentHash.compute_sha256_hex(commit_text)
-    stored_unit : Unit <- Binding.store_value(LogicalKey.build_commit_storage_key(commit_identifier), commit_text)
+    stored_unit : Unit <- MyLsmStore.sput(LogicalKey.build_commit_storage_key(commit_identifier), commit_text)
     return Make{commit_identifier, parent_commit_identifiers, tree_hash_value, 0n, metadata, None{}}
 
 def persist_tree(+merged_entries: List<&2, Reading.ChainEntry>) -> MyLsmStore.Sess<&2, String>:
   do MyLsmStore.Sess<&2, String>:
     +tree_hash_value : String = StateTree.compute_tree_hash(merged_entries)
-    stored_unit : Unit <- Binding.store_value(LogicalKey.build_tree_storage_key(tree_hash_value), StateTree.serialize_tree(merged_entries, tree_hash_value))
+    stored_unit : Unit <- MyLsmStore.sput(LogicalKey.build_tree_storage_key(tree_hash_value), StateTree.serialize_tree(merged_entries, tree_hash_value))
     return tree_hash_value
 
 def write_each_index(merged_entries: List<&2, Reading.ChainEntry>, +commit_value: Commit) -> MyLsmStore.Sess<&2, Unit>:
@@ -222,7 +221,7 @@ def write_each_index(merged_entries: List<&2, Reading.ChainEntry>, +commit_value
       empty_unit()
     case Con{+head_entry, remaining_entries}:
       do MyLsmStore.Sess<&2, Unit>:
-        head_unit : Unit <- Binding.store_value(LogicalKey.build_version_index_key(Reading.entry_key_of(head_entry), commit_identifier_of(commit_value)), Reading.entry_value_of(head_entry))
+        head_unit : Unit <- MyLsmStore.sput(LogicalKey.build_version_index_key(Reading.entry_key_of(head_entry), commit_identifier_of(commit_value)), Reading.entry_value_of(head_entry))
         tail_unit : Unit <- write_each_index(remaining_entries, commit_value)
         return tail_unit
 
@@ -232,7 +231,7 @@ def clear_stage_keys(+session_identifier: String, merged_entries: List<&2, Readi
       empty_unit()
     case Con{head_entry, remaining_entries}:
       do MyLsmStore.Sess<&2, Unit>:
-        cleared_unit : Unit <- Binding.remove_value(LogicalKey.build_stage_storage_key_combined(session_identifier, Reading.entry_key_of(head_entry)))
+        cleared_unit : Unit <- MyLsmStore.sdel(LogicalKey.build_stage_storage_key_combined(session_identifier, Reading.entry_key_of(head_entry)))
         cleared_tail : Unit <- clear_stage_keys(session_identifier, remaining_entries)
         return cleared_tail
 
@@ -240,7 +239,7 @@ def persist_index_and_clear(+session_identifier: String, +merged_entries: List<&
   do MyLsmStore.Sess<&2, Unit>:
     indexed_unit : Unit <- write_each_index(merged_entries, commit_value)
     cleared_unit : Unit <- clear_stage_keys(session_identifier, merged_entries)
-    index_cleared_unit : Unit <- Binding.remove_value(Staging.stage_index_key(session_identifier))
+    index_cleared_unit : Unit <- MyLsmStore.sdel(Staging.stage_index_key(session_identifier))
     return index_cleared_unit
 
 def materialize_commit(+session_identifier: String, +parent_commit_identifiers: List<&2, String>, metadata: List<&2, CommitMeta>, +merged_entries: List<&2, Reading.ChainEntry>) -> MyLsmStore.Sess<&2, Commit>:
@@ -259,7 +258,7 @@ def parse_tree_text(tree_hash_value: String, tree_maybe: Maybe<&2, String>) -> M
 
 def load_tree_text(+tree_hash_value: String) -> MyLsmStore.Sess<&2, Maybe<&2, StateTree.StateTreeNode>>:
   do MyLsmStore.Sess<&2, Maybe<&2, StateTree.StateTreeNode>>:
-    tree_maybe : Maybe<&2, String> <- Binding.load_value(LogicalKey.build_tree_storage_key(tree_hash_value))
+    tree_maybe : Maybe<&2, String> <- MyLsmStore.sget(LogicalKey.build_tree_storage_key(tree_hash_value))
     return parse_tree_text(tree_hash_value, tree_maybe)
 
 def load_tree_by_commit(commit_maybe: Maybe<&2, Commit>) -> MyLsmStore.Sess<&2, Maybe<&2, StateTree.StateTreeNode>>:
@@ -303,7 +302,7 @@ def prepend_pair_maybe(+head_key: String, head_value_maybe: Maybe<&2, String>, t
 
 def prepend_loaded_pair(+session_identifier: String, +head_key: String, tail_action: MyLsmStore.Sess<&2, List<&2, Reading.ChainEntry>>) -> MyLsmStore.Sess<&2, List<&2, Reading.ChainEntry>>:
   do MyLsmStore.Sess<&2, List<&2, Reading.ChainEntry>>:
-    head_value_maybe : Maybe<&2, String> <- Binding.load_value(LogicalKey.build_stage_storage_key_combined(session_identifier, head_key))
+    head_value_maybe : Maybe<&2, String> <- MyLsmStore.sget(LogicalKey.build_stage_storage_key_combined(session_identifier, head_key))
     tail_pairs : List<&2, Reading.ChainEntry> <- tail_action
     return prepend_pair_maybe(head_key, head_value_maybe, tail_pairs)
 
@@ -384,7 +383,7 @@ def search_chain_entries(ancestor_chain: List<&2, String>, +namespace_name: Stri
     case Con{head_commit, remaining_commits}:
       do MyLsmStore.Sess<&2, Maybe<&2, Reading.ChainEntry>>:
         +lookup_key : String = Reading.encode_lookup_key(namespace_name, record_identifier)
-        stored_maybe : Maybe<&2, String> <- Binding.load_value(LogicalKey.build_version_index_key(lookup_key, head_commit))
+        stored_maybe : Maybe<&2, String> <- MyLsmStore.sget(LogicalKey.build_version_index_key(lookup_key, head_commit))
         tail_result : Maybe<&2, Reading.ChainEntry> <- search_chain_entries(remaining_commits, namespace_name, record_identifier)
         return decide_search_hit(stored_maybe, lookup_key, tail_result)
 
