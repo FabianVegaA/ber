@@ -6,20 +6,16 @@ import ./StateTree.bend as StateTree
 import ./Staging.bend as Staging
 import ./ContentObject.bend as ContentObject
 import ./MyLsmBinding.bend as Binding
+import ./JsonAdapter.bend as JsonAdapter
 import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
-import ../vendor/json/json.bend as JsonLib
+import bend-kit-json@0.3.0.0/json.bend as Json
 
 # Linear history: staging -> merged tree -> commit -> per-key version index.
-# Commits serialize as canonical JSON WITHOUT timestamp/certificate
-# (both re-materialize on load: timestamp 0, certificate None).
-# Integrity: loads re-serialize the parsed fields and compare against the
-# stored text — a mismatch yields None, never a corrupt value.
-#
-# EFFECT RULE: Sess composition uses ONLY Binding wrappers.
-# MyLsmStore named for Sess types only.
-#
-# ORDER: callees before callers. Mutual recursion is forbidden, so index
-# writes and stage clearing are SINGLE recursive defs with inline do-blocks.
+# Commits serialize as canonical JSON without timestamp/certificate (both
+# re-materialize on load: 0 / None). Loads re-serialize the parsed fields and
+# compare against the stored text: a mismatch yields None, never corruption.
+# Kit is named for the Val TYPE only; operations go through JsonAdapter.
+# Effects are MyLSM Sess actions composed in do-blocks.
 
 type CommitMeta is Data:
   Field{field_key: String, field_value: String}
@@ -37,30 +33,30 @@ def commit_tree_of(commit_value: Commit) -> String:
     case Make{commit_identifier, parent_commit_identifiers, tree_hash, timestamp, metadata, certificate_hash}:
       tree_hash
 
-def meta_pair_to_json(meta_field: CommitMeta) -> JsonLib.Json:
+def meta_pair_to_json(meta_field: CommitMeta) -> Json.Val:
   match meta_field:
     case Field{field_key, field_value}:
-      JsonLib.arr(Con{JsonLib.str(field_key), Con{JsonLib.str(field_value), Nil{}}})
+      JsonAdapter.make_arr(Con{JsonAdapter.make_str(field_key), Con{JsonAdapter.make_str(field_value), Nil{}}})
 
-def meta_list_to_json(metadata: List<&2, CommitMeta>) -> List<&2, JsonLib.Json>:
+def meta_list_to_json(metadata: List<&2, CommitMeta>) -> List<&2, Json.Val>:
   match metadata:
     case Nil{}:
       Nil{}
     case Con{head_field, remaining_fields}:
       Con{meta_pair_to_json(head_field), meta_list_to_json(remaining_fields)}
 
-def encode_parent_list(parent_commit_identifiers: List<&2, String>) -> List<&2, JsonLib.Json>:
+def encode_parent_list(parent_commit_identifiers: List<&2, String>) -> List<&2, Json.Val>:
   match parent_commit_identifiers:
     case Nil{}:
       Nil{}
     case Con{head_parent, remaining_parents}:
-      Con{JsonLib.str(head_parent), encode_parent_list(remaining_parents)}
+      Con{JsonAdapter.make_str(head_parent), encode_parent_list(remaining_parents)}
 
-def finalize_commit_document(parents_field: Sigma<&2, &2, String, _ => JsonLib.Json>, tree_field: Sigma<&2, &2, String, _ => JsonLib.Json>, meta_field: Sigma<&2, &2, String, _ => JsonLib.Json>) -> String:
-  JsonLib.stringify(JsonLib.sort_keys(JsonLib.obj(Con{parents_field, Con{tree_field, Con{meta_field, Nil{}}}})))
+def finalize_commit_document(parents_field: Sigma<&2, &2, String, _ => Json.Val>, tree_field: Sigma<&2, &2, String, _ => Json.Val>, meta_field: Sigma<&2, &2, String, _ => Json.Val>) -> String:
+  JsonAdapter.encode_canonical(JsonAdapter.make_obj(Con{parents_field, Con{tree_field, Con{meta_field, Nil{}}}}))
 
 def serialize_commit(parent_commit_identifiers: List<&2, String>, metadata: List<&2, CommitMeta>, tree_hash_value: String) -> String:
-  finalize_commit_document(JsonLib.kv("parents", JsonLib.arr(encode_parent_list(parent_commit_identifiers))), JsonLib.kv("tree", JsonLib.str(tree_hash_value)), JsonLib.kv("meta", JsonLib.arr(meta_list_to_json(metadata))))
+  finalize_commit_document(JsonAdapter.make_kv("parents", JsonAdapter.make_arr(encode_parent_list(parent_commit_identifiers))), JsonAdapter.make_kv("tree", JsonAdapter.make_str(tree_hash_value)), JsonAdapter.make_kv("meta", JsonAdapter.make_arr(meta_list_to_json(metadata))))
 
 def prepend_meta_field(field_key: String, field_value: String, parsed_tail: Maybe<&2, List<&2, CommitMeta>>) -> Maybe<&2, List<&2, CommitMeta>>:
   match parsed_tail:
@@ -83,24 +79,24 @@ def prepend_meta_texts(key_maybe: Maybe<&2, String>, value_maybe: Maybe<&2, Stri
     case Some{field_key}:
       prepend_meta_value(field_key, value_maybe, parsed_tail)
 
-def prepend_meta_items(pair_items: List<&2, JsonLib.Json>, parsed_tail: Maybe<&2, List<&2, CommitMeta>>) -> Maybe<&2, List<&2, CommitMeta>>:
+def prepend_meta_items(pair_items: List<&2, Json.Val>, parsed_tail: Maybe<&2, List<&2, CommitMeta>>) -> Maybe<&2, List<&2, CommitMeta>>:
   match pair_items:
     case Con{key_json, Con{value_json, Nil{}}}:
-      prepend_meta_texts(JsonLib.as_str(key_json), JsonLib.as_str(value_json), parsed_tail)
+      prepend_meta_texts(JsonAdapter.as_str(key_json), JsonAdapter.as_str(value_json), parsed_tail)
     case _:
       None{}
 
-def prepend_parsed_meta(pair_maybe: Maybe<&2, List<&2, JsonLib.Json>>, parsed_tail: Maybe<&2, List<&2, CommitMeta>>) -> Maybe<&2, List<&2, CommitMeta>>:
+def prepend_parsed_meta(pair_maybe: Maybe<&2, List<&2, Json.Val>>, parsed_tail: Maybe<&2, List<&2, CommitMeta>>) -> Maybe<&2, List<&2, CommitMeta>>:
   match pair_maybe:
     case None{}:
       None{}
     case Some{pair_items}:
       prepend_meta_items(pair_items, parsed_tail)
 
-def prepend_meta_entry(head_item: JsonLib.Json, parsed_tail: Maybe<&2, List<&2, CommitMeta>>) -> Maybe<&2, List<&2, CommitMeta>>:
-  prepend_parsed_meta(JsonLib.as_arr(head_item), parsed_tail)
+def prepend_meta_entry(head_item: Json.Val, parsed_tail: Maybe<&2, List<&2, CommitMeta>>) -> Maybe<&2, List<&2, CommitMeta>>:
+  prepend_parsed_meta(JsonAdapter.as_arr(head_item), parsed_tail)
 
-def parse_meta_list(meta_items: List<&2, JsonLib.Json>) -> Maybe<&2, List<&2, CommitMeta>>:
+def parse_meta_list(meta_items: List<&2, Json.Val>) -> Maybe<&2, List<&2, CommitMeta>>:
   match meta_items:
     case Nil{}:
       Some{Nil{}}
@@ -121,67 +117,67 @@ def finish_commit_meta(+requested_identifier: String, +stored_text: String, +par
     case Some{+parsed_meta}:
       verify_commit_text(String.eq(serialize_commit(parent_list, parsed_meta, tree_text), stored_text), requested_identifier, parent_list, tree_text, parsed_meta)
 
-def finish_commit(+requested_identifier: String, +stored_text: String, +parent_list: List<&2, String>, +tree_text: String, meta_items_maybe: Maybe<&2, List<&2, JsonLib.Json>>) -> Maybe<&2, Commit>:
+def finish_commit(+requested_identifier: String, +stored_text: String, +parent_list: List<&2, String>, +tree_text: String, meta_items_maybe: Maybe<&2, List<&2, Json.Val>>) -> Maybe<&2, Commit>:
   match meta_items_maybe:
     case None{}:
       None{}
     case Some{meta_items}:
       finish_commit_meta(requested_identifier, stored_text, parent_list, tree_text, parse_meta_list(meta_items))
 
-def finish_meta_array(+requested_identifier: String, +stored_text: String, +parent_list: List<&2, String>, +tree_text: String, meta_maybe: Maybe<&2, JsonLib.Json>) -> Maybe<&2, Commit>:
+def finish_meta_array(+requested_identifier: String, +stored_text: String, +parent_list: List<&2, String>, +tree_text: String, meta_maybe: Maybe<&2, Json.Val>) -> Maybe<&2, Commit>:
   match meta_maybe:
     case None{}:
       None{}
     case Some{meta_json}:
-      finish_commit(requested_identifier, stored_text, parent_list, tree_text, JsonLib.as_arr(meta_json))
+      finish_commit(requested_identifier, stored_text, parent_list, tree_text, JsonAdapter.as_arr(meta_json))
 
-def tree_maybe_as_text(tree_maybe: Maybe<&2, JsonLib.Json>) -> Maybe<&2, String>:
+def tree_maybe_as_text(tree_maybe: Maybe<&2, Json.Val>) -> Maybe<&2, String>:
   match tree_maybe:
     case None{}:
       None{}
     case Some{tree_json}:
-      JsonLib.as_str(tree_json)
+      JsonAdapter.as_str(tree_json)
 
-def extract_commit_meta(+requested_identifier: String, +stored_text: String, +parent_list: List<&2, String>, tree_text_maybe: Maybe<&2, String>, +document: JsonLib.Json) -> Maybe<&2, Commit>:
+def extract_commit_meta(+requested_identifier: String, +stored_text: String, +parent_list: List<&2, String>, tree_text_maybe: Maybe<&2, String>, +document: Json.Val) -> Maybe<&2, Commit>:
   match tree_text_maybe:
     case None{}:
       None{}
     case Some{tree_text}:
-      finish_meta_array(requested_identifier, stored_text, parent_list, tree_text, JsonLib.get(document, "meta"))
+      finish_meta_array(requested_identifier, stored_text, parent_list, tree_text, JsonAdapter.get_field(document, "meta"))
 
-def extract_commit_tree(+requested_identifier: String, +stored_text: String, parent_strings_maybe: Maybe<&2, List<&2, String>>, tree_maybe: Maybe<&2, JsonLib.Json>, +document: JsonLib.Json) -> Maybe<&2, Commit>:
+def extract_commit_tree(+requested_identifier: String, +stored_text: String, parent_strings_maybe: Maybe<&2, List<&2, String>>, tree_maybe: Maybe<&2, Json.Val>, +document: Json.Val) -> Maybe<&2, Commit>:
   match parent_strings_maybe:
     case None{}:
       None{}
     case Some{parent_list}:
       extract_commit_meta(requested_identifier, stored_text, parent_list, tree_maybe_as_text(tree_maybe), document)
 
-def extract_parents_items(+requested_identifier: String, +stored_text: String, items_maybe: Maybe<&2, List<&2, JsonLib.Json>>, +document: JsonLib.Json) -> Maybe<&2, Commit>:
+def extract_parents_items(+requested_identifier: String, +stored_text: String, items_maybe: Maybe<&2, List<&2, Json.Val>>, +document: Json.Val) -> Maybe<&2, Commit>:
   match items_maybe:
     case None{}:
       None{}
     case Some{parent_items}:
-      extract_commit_tree(requested_identifier, stored_text, ContentObject.extract_each_string(parent_items), JsonLib.get(document, "tree"), document)
+      extract_commit_tree(requested_identifier, stored_text, ContentObject.extract_each_string(parent_items), JsonAdapter.get_field(document, "tree"), document)
 
-def extract_parents_array(+requested_identifier: String, +stored_text: String, parents_maybe: Maybe<&2, JsonLib.Json>, +document: JsonLib.Json) -> Maybe<&2, Commit>:
+def extract_parents_array(+requested_identifier: String, +stored_text: String, parents_maybe: Maybe<&2, Json.Val>, +document: Json.Val) -> Maybe<&2, Commit>:
   match parents_maybe:
     case None{}:
       None{}
     case Some{parents_json}:
-      extract_parents_items(requested_identifier, stored_text, JsonLib.as_arr(parents_json), document)
+      extract_parents_items(requested_identifier, stored_text, JsonAdapter.as_arr(parents_json), document)
 
-def extract_commit_parents(+requested_identifier: String, +stored_text: String, +document: JsonLib.Json) -> Maybe<&2, Commit>:
-  extract_parents_array(requested_identifier, stored_text, JsonLib.get(document, "parents"), document)
+def extract_commit_parents(+requested_identifier: String, +stored_text: String, +document: Json.Val) -> Maybe<&2, Commit>:
+  extract_parents_array(requested_identifier, stored_text, JsonAdapter.get_field(document, "parents"), document)
 
-def commit_from_parse(requested_identifier: String, stored_text: String, parse_result: Result<&2, &2, String, JsonLib.Json>) -> Maybe<&2, Commit>:
+def commit_from_parse(requested_identifier: String, stored_text: String, parse_result: Maybe<&2, Json.Val>) -> Maybe<&2, Commit>:
   match parse_result:
-    case Fail{parse_error}:
+    case None{}:
       None{}
-    case Done{+document}:
+    case Some{+document}:
       extract_commit_parents(requested_identifier, stored_text, document)
 
 def parse_commit_text(requested_identifier: String, +stored_text: String) -> Maybe<&2, Commit>:
-  commit_from_parse(requested_identifier, stored_text, JsonLib.parse(stored_text))
+  commit_from_parse(requested_identifier, stored_text, JsonAdapter.parse_text(stored_text))
 
 def parse_commit(requested_identifier: String, stored_maybe: Maybe<&2, String>) -> Maybe<&2, Commit>:
   match stored_maybe:
@@ -331,11 +327,8 @@ def create_commit(+session_identifier: String, +parent_commit_identifiers: List<
     finished_commit : Commit <- materialize_commit(session_identifier, parent_commit_identifiers, metadata, StateTree.merge_sorted_entries(staged_pairs, base_entries))
     return finished_commit
 
-# ---- Versioned reads (Task 4) ----
-# Chain walk is fuel-first (fuel decrements in argument position 1, so the
-# termination checker accepts it). Unknown commits contribute "" links that
-# can never match a real index key — lookups simply skip them.
-
+# Versioned reads walk the first-parent chain with Nat fuel; unknown
+# commits contribute "" links that never match a real index key.
 def commit_parents_of(commit_value: Commit) -> List<&2, String>:
   match commit_value:
     case Make{commit_identifier, parent_commit_identifiers, tree_hash, timestamp, metadata, certificate_hash}:
