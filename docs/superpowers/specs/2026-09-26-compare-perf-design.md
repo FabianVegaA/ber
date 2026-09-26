@@ -1,0 +1,56 @@
+# Compare perf — design (fan-out scaling + sort-merge epic)
+
+Date: 2026-09-26. Branch: `perf/compare-fanout` (from tag-0.1.0.0 lineage + LICENSE). Status: approved for implementation.
+Scope: `src/Comparison.bend` hot path only. Out of scope: GPU (`!`, divergent workload per spec §6), ber-cli IO facade, `pack.json`/publish, `SchemaLaw`, parquet-row parsing.
+
+## 1. Diagnosis (measured 2026-09-26, native binary, 12 CPUs)
+
+| N | sequential | fanned (8 threads) | wall speedup |
+|---:|---:|---:|---:|
+| 100 | 0.46s | 0.02s | noise (startup dominates) |
+| 1,000 | 1.11s | 1.16–1.26s | 0.88–0.96x (spawn overhead wins) |
+| 10,000 | 115.98s | 114.76s | 1.01x |
+
+Counts agree on every run (`modified = N/5`). The fanned path burns 2x CPU (`user` 229s vs 116s) for 1x wall: both lanes work, but total work doubles. Prime suspect, confirmed in code (`src/Comparison.bend:162-163,177-178,192-193`): both parallel lanes scan the SAME `+reference_entries` list — every element read costs an atomic (`bend guide` warns exactly this), so O(n²) atomic reads serialize the lanes. The fix is the experiment that confirms or kills this theory.
+
+## 2. Task 1 — private per-lane copies (high value, small diff)
+
+Clone the reference list (O(n), negligible vs O(n²) scans) so each lane scans a private spine with zero atomics:
+
+```python
+# Copies the spine so each lane scans a private list without atomics.
+def copy_entries(source_entries: List<&2, Reading.ChainEntry>) -> List<&2, Reading.ChainEntry>:
+  match source_entries:
+    case Nil{}:
+      Nil{}
+    case Con{head_entry, remaining_entries}:
+      Con{head_entry, copy_entries(remaining_entries)}
+```
+
+Applied at the 6 parallel call sites (`fan_added/removed/modified_halves` wrap `reference_entries` in `copy_entries`), e.g.:
+
+```python
+even_added odd_added = second_only_entries(copy_entries(reference_entries), even_entries) second_only_entries(copy_entries(reference_entries), odd_entries)
+```
+
+PDD: one new law `copy_preserves_length` (`length(copy(x)) == length(x)` on a fixture, `{==}`); the 6 existing fanout-agreement laws must stay green — that IS the behavior-preservation proof. Verify: bench 1k/10k before/after. Expectation if theory holds: wall 10k toward ~60s (ideal 2-way). If wall doesn't move, contention theory dies and we record why.
+
+## 3. Task 2 — threshold retune (trivial, after Task 1)
+
+`comparison_parallel_threshold() = 1024n` with a measured loss zone ≤1k. No law pins its value — safe to change. Set to the crossover re-measured after Task 1 (candidates 4096/8192).
+
+## 4. Task 3 — 4-way fan-out (medium, conditional on scaling evidence)
+
+Only if Task 1 shows lanes scaling: double alternating split into quarters, 4 parallel lets per added/removed/modified, append unions. If lanes still don't scale after private copies → memory-bandwidth-bound → discard WITH data, not opinion.
+
+## 5. Epic — sort-merge O(n log n) with empirical bitonic comparison
+
+The real algorithmic fix (sort once + linear merge instead of quadratic scans). Decided with user: implement BOTH variants behind one interface, decide by measurement, not debate.
+
+- Variant A — sequential merge sort over `List<ChainEntry>` by key (`String.cmp`, already used in `StateTree`). No padding, structural recursion the checker accepts, CPU. Laws: sorted-output-equals-literal on fixtures + differential count laws vs the current path.
+- Variant B — vendored bitonic adapted from the Bend `pure_par_sort` demo (fixed 2^d Nat trees, GPU-oriented, proofs cover sum-preservation only — NOT sortedness). Adaptation cost is real: list→padded-tree with a max-key sentinel, `String.cmp` in `mix`, tree→list unpadding preserving the counts the fanout laws pin. No hub package exists; vendor + adapt.
+- Protocol: same fixtures, same metrics (wall/user at 1k/10k) + proof cost (laws needed) + code delta as tiebreakers. Winner rule: wall first; within 10%, fewer laws/code wins. Universals stay deferred under the inversion wall either way (concrete instances only).
+
+## 6. Acceptance
+
+`bend PROOF.bend` green after every task (existing agreement laws pin behavior; new laws for new defs); `bolt` 0 errors; every bench table recorded in the plan doc Measurements section; `LAWS.bend` claims reviewed (worker writes, human reviews per standing delegation).
