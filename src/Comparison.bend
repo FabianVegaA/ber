@@ -42,6 +42,11 @@ def pruned_count_of(compare_result: CompareResult) -> Nat:
     case Make{added_keys, removed_keys, modified_entries, pruned_subtree_count, compared_entry_count}:
       pruned_subtree_count
 
+def compared_entry_count_of(compare_result: CompareResult) -> Nat:
+  match compare_result:
+    case Make{added_keys, removed_keys, modified_entries, pruned_subtree_count, compared_entry_count}:
+      compared_entry_count
+
 def entry_to_logical_key(head_entry: Reading.ChainEntry) -> LogicalKey.LogicalKey:
   LogicalKey.split_combined_key(Reading.entry_key_of(head_entry))
 

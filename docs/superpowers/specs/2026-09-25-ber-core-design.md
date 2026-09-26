@@ -196,10 +196,33 @@ law merge_commutativity_disjoint:
 
 Laws quantify over **pure cores** (`merge_tree : String -> String -> String`, `compare_entries`, `compute_tree_hash`), not over live `IO` handles: IO values cannot be compared for equality in proofs. The IO wrappers (`merge_commits`, `read_value_at`) are thin shells that load, call the pure core, and store — the property lives in the core, where Bend can check it.
 
-- v0.1 ships Law 1 as PROVEN BASE INSTANCES (`empty_chain_reads_none`, `resolve_none_stable`, `normalize_nil_stable` — green gate, real regression value). v0.2 ships Laws 2–3 + certificate, GATED on the eq-lemma epic below. Law 4 (`SchemaLaw` extension point, v0.4) is a consumer-registered predicate checked before `MergeSuccess`.
-- Law-1 GENERAL instance DEFERRED (shadow-invariance: `lookup(ns,id,normalize(chain)) == lookup(ns,id,chain)`): its False-branch needs `String.eq` transitivity/symmetry — a characterization library neither Base nor bend-lemmas ships (verified gap, 2026-09-25). It becomes the first law of the v0.2 lemma-library epic: `String.eq` soundness/transitivity/symmetry by string induction, then the shadow law, then Laws 2–3 (whose hash-equality reasoning needs the same apparatus). The gate stays green-but-partial until then BY DESIGN — a red/green gate that says exactly what's proven is the product, not an obstacle.
+- v0.1 ships Law 1 as PROVEN BASE INSTANCES (`empty_chain_reads_none`, `resolve_none_stable`, `normalize_nil_stable` — green gate, real regression value). Merge/cert families ship as a COMPLETE CONCRETE TRUTH TABLE (every (base,first,second) presence/value cell + verify accept/tamper/empty-laws/unknown-strategy/wrong-entries rejects — all green by computation). Universal coverage: `string_eq_refl`, `word_cmp_refl` (open terms, via local `src/EqTheory.bend` refl tower: Word→U32→Char→String), `compare_counts_correct`, certificate/commit field roundtrips. Law 4 (`SchemaLaw` extension point, v0.4) is a consumer-registered predicate checked before `MergeSuccess`.
+- GENERAL instances (shadow-invariance, merge idempotence/commutativity universals, verify-soundness universal): PROVEN UNPROVABLE with Bend 2.0.28 as it stands — a language-level boundary, not a missing lemma (verified 2026-09-26, see below). They stay OUT of `LAWS.bend` (an open law reds the gate for everyone) and are tracked here instead. The gate stays green-and-exact: everything claimed is proven, everything deferred is named.
 - `verify_certificate`: reloads parents, base and result tree from MyLSM, recomputes both deltas via the pure `compare_entries` core, checks disjointness and that the recomputed tree hash equals `result_tree_hash`, and that every `checked_laws` entry is `True`. Trusts nothing from the producer. `False` if any object is missing.
 - `MergeUnprovable` when: no common ancestor within `MAX_ANCESTOR_WALK` hops (default 10000), unknown strategy, or a `SchemaLaw` fails. Never guesses.
+
+### 5.1 The inversion wall (verified boundary, 2026-09-26)
+
+Every deferred general law has the same shape: case analysis on a COMPUTED
+`String.eq` (or `Nat`/`Bool` derived from one) where one branch contradicts a
+hypothesis. Discharging such a branch needs one of:
+(a) matching on an equality proof (inversion — rejected: "expected: a
+datatype", proofs aren't scrutineeable), or
+(b) explosion from a constructor clash (`False==True` ⇒ anything — no
+eliminator: rewrite only substitutes, never eliminates).
+Probed directly (`def boom(h : {False==True})` — match rejected). Consequence:
+NO property requiring inversion of a computed comparison is provable in Bend
+2.0.28, however true. This covers `String.eq` soundness/substitution (hence
+shadow-invariance, merge idempotence/commutativity universals, verify
+universal soundness, `split∘encode` roundtrip).
+What WOULD unblock it (upstream, in order): Base-shipped `U32`/`Char` order
+lemmas + a discrimination eliminator (`{False==True} → Empty` or matchable
+equality). Until then the honest ceiling is: reflexivity tower (shipped in
+`src/EqTheory.bend`), complete concrete truth tables (every cell green),
+universal computational laws (no computed-value case splits). mylsm's own
+trust root agrees: Base primitives are the trusted kernel; ber-core extends
+that kernel by exactly the inversion principle, documented here instead of
+smuggled in.
 
 ## 6. Compare engine (Merkle pruning + parallel let, GPU via `!`)
 

@@ -5,6 +5,7 @@ import ./src/Comparison.bend as Comparison
 import ./src/Merging.bend as Merging
 import ./src/StateTree.bend as StateTree
 import ./src/Certificate.bend as Certificate
+import ./src/EqTheory.bend as EqTheory
 
 # LAW 1, v0.1 instances: empty-history behavior, proven below (green gate).
 # Each pins a base case against regressions; none branches on key comparison,
@@ -74,6 +75,65 @@ law merge_delete_modify_conflicts:
 law merge_modify_delete_conflicts:
   {Merging.merge_entry_lists(Con{Reading.make_entry("ledger/record_first", "version_one"), Nil{}}, Con{Reading.make_entry("ledger/record_first", "version_two"), Nil{}}, Nil{}) == Merging.ConflictingKeys{Con{LogicalKey.split_combined_key("ledger/record_first"), Nil{}}} : Merging.MergeOutcome}
 
+# FULL TRUTH TABLE, remaining cells (Task: formalization finale). Every
+# (base, first, second) presence/value combination is pinned on concrete keys.
+# All hold by computation ({==}) — the table IS the specification, and these
+# laws are its machine-checked regression net. Universal versions need
+# hypothesis inversion (see spec §5 wall) and stay deferred.
+law merge_absent_absent_absent:
+  {Merging.merge_entry_lists(Nil{}, Nil{}, Nil{}) == Merging.MergedEntries{Nil{}} : Merging.MergeOutcome}
+
+law merge_same_value_both_sides:
+  {Merging.merge_entry_lists(Nil{}, Con{Reading.make_entry("ledger/record_first", "version_one"), Nil{}}, Con{Reading.make_entry("ledger/record_first", "version_one"), Nil{}}) == Merging.MergedEntries{Con{Reading.make_entry("ledger/record_first", "version_one"), Nil{}}} : Merging.MergeOutcome}
+
+law merge_first_unchanged_keep_second:
+  {Merging.merge_entry_lists(Con{Reading.make_entry("ledger/record_first", "version_one"), Nil{}}, Con{Reading.make_entry("ledger/record_first", "version_one"), Nil{}}, Con{Reading.make_entry("ledger/record_first", "version_two"), Nil{}}) == Merging.MergedEntries{Con{Reading.make_entry("ledger/record_first", "version_two"), Nil{}}} : Merging.MergeOutcome}
+
+law merge_second_unchanged_keep_first:
+  {Merging.merge_entry_lists(Con{Reading.make_entry("ledger/record_first", "version_one"), Nil{}}, Con{Reading.make_entry("ledger/record_first", "version_two"), Nil{}}, Con{Reading.make_entry("ledger/record_first", "version_one"), Nil{}}) == Merging.MergedEntries{Con{Reading.make_entry("ledger/record_first", "version_two"), Nil{}}} : Merging.MergeOutcome}
+
+law merge_all_different_conflict:
+  {Merging.merge_entry_lists(Con{Reading.make_entry("ledger/record_first", "version_one"), Nil{}}, Con{Reading.make_entry("ledger/record_first", "version_two"), Nil{}}, Con{Reading.make_entry("ledger/record_first", "version_three"), Nil{}}) == Merging.ConflictingKeys{Con{LogicalKey.split_combined_key("ledger/record_first"), Nil{}}} : Merging.MergeOutcome}
+
+law merge_absent_absent_present:
+  {Merging.merge_entry_lists(Nil{}, Nil{}, Con{Reading.make_entry("ledger/record_first", "version_one"), Nil{}}) == Merging.MergedEntries{Con{Reading.make_entry("ledger/record_first", "version_one"), Nil{}}} : Merging.MergeOutcome}
+
+law merge_present_absent_absent:
+  {Merging.merge_entry_lists(Con{Reading.make_entry("ledger/record_first", "version_one"), Nil{}}, Nil{}, Nil{}) == Merging.MergedEntries{Nil{}} : Merging.MergeOutcome}
+
+law verify_rejects_unknown_strategy:
+  {Certificate.verify_merge_certificate_pure(Nil{}, Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Nil{}}, Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}, Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}}, Merging.Make{"commit_first", "commit_second", "commit_base", StateTree.compute_tree_hash(Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}}), "sideways-merge", Con{Merging.Check{"pairwise-compatibility", True{}}, Nil{}}}) == False{} : Bool}
+
+law verify_rejects_wrong_entries:
+  {Certificate.verify_merge_certificate_pure(Nil{}, Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Nil{}}, Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}, Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Nil{}}, Merging.Make{"commit_first", "commit_second", "commit_base", StateTree.compute_tree_hash(Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}}), "union-disjoint", Con{Merging.Check{"pairwise-compatibility", True{}}, Nil{}}}) == False{} : Bool}
+
+# UNIVERSAL COMPUTATIONAL laws (finale): properties over open terms whose
+# proofs need NO case analysis on computed values — the goal reduces
+# definitionally, closed by {==}. They pin count accounting and field layout
+# for ALL inputs, not just fixtures.
+law compare_counts_correct:
+  for first_entries: List<&2, Reading.ChainEntry>
+  for second_entries: List<&2, Reading.ChainEntry>
+  {Comparison.compared_entry_count_of(Comparison.compare_sorted_entries(first_entries, second_entries)) == Nat.add(List.length(&2, Reading.ChainEntry, first_entries), List.length(&2, Reading.ChainEntry, second_entries)) : Nat}
+
+law cert_first_parent_roundtrip:
+  for first_parent_commit: String
+  for second_parent_commit: String
+  for base_commit: String
+  for result_tree_hash: String
+  for strategy_name: String
+  for checked_laws: List<&2, Merging.LawCheck>
+  {Merging.cert_first_parent(Merging.Make{first_parent_commit, second_parent_commit, base_commit, result_tree_hash, strategy_name, checked_laws}) == first_parent_commit : String}
+
+law cert_result_tree_roundtrip:
+  for first_parent_commit: String
+  for second_parent_commit: String
+  for base_commit: String
+  for result_tree_hash: String
+  for strategy_name: String
+  for checked_laws: List<&2, Merging.LawCheck>
+  {Merging.cert_result_tree(Merging.Make{first_parent_commit, second_parent_commit, base_commit, result_tree_hash, strategy_name, checked_laws}) == result_tree_hash : String}
+
 # LAW 4 FAMILY, v0.1 instances (Task 7): certificate verification pins on
 # CONCRETE entries. The pure core re-derives hash + merge + law-evidence, so
 # all hold by computation. Universal verify-soundness needs the eq epic.
@@ -85,3 +145,16 @@ law verify_rejects_tampered_tree:
 
 law verify_rejects_empty_laws:
   {Certificate.verify_merge_certificate_pure(Nil{}, Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Nil{}}, Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}, Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}}, Merging.Make{"commit_first", "commit_second", "commit_base", StateTree.compute_tree_hash(Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}}), "union-disjoint", Nil{}}) == False{} : Bool}
+
+# EQUALITY THEORY, universal (EqTheory): key comparison is reflexive.
+# These are the first universal laws over open terms in ber-core — every
+# general merge/read law rewrites with string_eq_refl; it is the base of the
+# soundness tower (bool-true ⟹ propositional equality).
+law string_eq_refl:
+  for text: String
+  {String.eq(text, text) == True{} : Bool}
+
+law word_cmp_refl:
+  for width: Nat
+  for word: Word(width)
+  {Word.cmp(width, word, word) == EQ{} : Cmp}
