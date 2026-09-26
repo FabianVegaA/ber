@@ -1,14 +1,14 @@
 import Base
 import ./Reading.bend as Reading
 import ./ContentHash.bend as ContentHash
-import ../vendor/json/json.bend as JsonLib
+import ./JsonAdapter.bend as JsonAdapter
+import bend-kit-json@0.3.0.0/json.bend as Json
 
 # Flat sorted state tree (v0.1: no children partitioning). Entries sorted by
-# combined key ("namespace/record"); staged entries win ties. Tree hash covers
-# the flattened entries only. This module owns BOTH tree directions
-# (serialize + parse); History only calls them.
-#
-# ORDER: callees before callers (Bend forbids forward references).
+# combined key ("namespace/record"); staged entries win ties. The tree hash
+# covers the flattened entries only, never the JSON text. This module owns
+# both tree directions (serialize + parse); History only calls them.
+# Kit is named for the Val TYPE only; operations go through JsonAdapter.
 
 type StateTreeNode is Data:
   Make{tree_hash: String, entries: List<&2, Reading.ChainEntry>, children_hashes: List<&2, String>}
@@ -64,21 +64,21 @@ def merge_sorted_entries(staged_entries: List<&2, Reading.ChainEntry>, base_entr
     case Con{staged_head, staged_tail}:
       merge_sorted_entries(staged_tail, insert_single_entry(base_entries, staged_head))
 
-def entry_pair_to_json(+head_entry: Reading.ChainEntry) -> JsonLib.Json:
-  JsonLib.arr(Con{JsonLib.str(Reading.entry_key_of(head_entry)), Con{JsonLib.str(Reading.entry_value_of(head_entry)), Nil{}}})
+def entry_pair_to_json(+head_entry: Reading.ChainEntry) -> Json.Val:
+  JsonAdapter.make_arr(Con{JsonAdapter.make_str(Reading.entry_key_of(head_entry)), Con{JsonAdapter.make_str(Reading.entry_value_of(head_entry)), Nil{}}})
 
-def entry_list_to_json(sorted_entries: List<&2, Reading.ChainEntry>) -> List<&2, JsonLib.Json>:
+def entry_list_to_json(sorted_entries: List<&2, Reading.ChainEntry>) -> List<&2, Json.Val>:
   match sorted_entries:
     case Nil{}:
       Nil{}
     case Con{head_entry, remaining_entries}:
       Con{entry_pair_to_json(head_entry), entry_list_to_json(remaining_entries)}
 
-def finalize_tree_document(hash_field: Sigma<&2, &2, String, _ => JsonLib.Json>, entries_field: Sigma<&2, &2, String, _ => JsonLib.Json>, children_field: Sigma<&2, &2, String, _ => JsonLib.Json>) -> String:
-  JsonLib.stringify(JsonLib.sort_keys(JsonLib.obj(Con{hash_field, Con{entries_field, Con{children_field, Nil{}}}})))
+def finalize_tree_document(hash_field: Sigma<&2, &2, String, _ => Json.Val>, entries_field: Sigma<&2, &2, String, _ => Json.Val>, children_field: Sigma<&2, &2, String, _ => Json.Val>) -> String:
+  JsonAdapter.encode_canonical(JsonAdapter.make_obj(Con{hash_field, Con{entries_field, Con{children_field, Nil{}}}}))
 
 def serialize_tree(+merged_entries: List<&2, Reading.ChainEntry>, +tree_hash_value: String) -> String:
-  finalize_tree_document(JsonLib.kv("hash", JsonLib.str(tree_hash_value)), JsonLib.kv("entries", JsonLib.arr(entry_list_to_json(merged_entries))), JsonLib.kv("children", JsonLib.arr(Nil{})))
+  finalize_tree_document(JsonAdapter.make_kv("hash", JsonAdapter.make_str(tree_hash_value)), JsonAdapter.make_kv("entries", JsonAdapter.make_arr(entry_list_to_json(merged_entries))), JsonAdapter.make_kv("children", JsonAdapter.make_arr(Nil{})))
 
 def prepend_entry_pair(key_text: String, value_text: String, parsed_tail: Maybe<&2, List<&2, Reading.ChainEntry>>) -> Maybe<&2, List<&2, Reading.ChainEntry>>:
   match parsed_tail:
@@ -101,24 +101,24 @@ def prepend_pair_texts(key_maybe: Maybe<&2, String>, value_maybe: Maybe<&2, Stri
     case Some{key_text}:
       prepend_value_text(key_text, value_maybe, parsed_tail)
 
-def prepend_pair_items(pair_items: List<&2, JsonLib.Json>, parsed_tail: Maybe<&2, List<&2, Reading.ChainEntry>>) -> Maybe<&2, List<&2, Reading.ChainEntry>>:
+def prepend_pair_items(pair_items: List<&2, Json.Val>, parsed_tail: Maybe<&2, List<&2, Reading.ChainEntry>>) -> Maybe<&2, List<&2, Reading.ChainEntry>>:
   match pair_items:
     case Con{key_json, Con{value_json, Nil{}}}:
-      prepend_pair_texts(JsonLib.as_str(key_json), JsonLib.as_str(value_json), parsed_tail)
+      prepend_pair_texts(JsonAdapter.as_str(key_json), JsonAdapter.as_str(value_json), parsed_tail)
     case _:
       None{}
 
-def prepend_parsed_pair(pair_maybe: Maybe<&2, List<&2, JsonLib.Json>>, parsed_tail: Maybe<&2, List<&2, Reading.ChainEntry>>) -> Maybe<&2, List<&2, Reading.ChainEntry>>:
+def prepend_parsed_pair(pair_maybe: Maybe<&2, List<&2, Json.Val>>, parsed_tail: Maybe<&2, List<&2, Reading.ChainEntry>>) -> Maybe<&2, List<&2, Reading.ChainEntry>>:
   match pair_maybe:
     case None{}:
       None{}
     case Some{pair_items}:
       prepend_pair_items(pair_items, parsed_tail)
 
-def prepend_parsed_entry(head_item: JsonLib.Json, parsed_tail: Maybe<&2, List<&2, Reading.ChainEntry>>) -> Maybe<&2, List<&2, Reading.ChainEntry>>:
-  prepend_parsed_pair(JsonLib.as_arr(head_item), parsed_tail)
+def prepend_parsed_entry(head_item: Json.Val, parsed_tail: Maybe<&2, List<&2, Reading.ChainEntry>>) -> Maybe<&2, List<&2, Reading.ChainEntry>>:
+  prepend_parsed_pair(JsonAdapter.as_arr(head_item), parsed_tail)
 
-def parse_entry_list(entry_items: List<&2, JsonLib.Json>) -> Maybe<&2, List<&2, Reading.ChainEntry>>:
+def parse_entry_list(entry_items: List<&2, Json.Val>) -> Maybe<&2, List<&2, Reading.ChainEntry>>:
   match entry_items:
     case Nil{}:
       Some{Nil{}}
@@ -139,10 +139,10 @@ def prepend_child_text(head_maybe: Maybe<&2, String>, parsed_tail: Maybe<&2, Lis
     case Some{head_text}:
       prepend_child_tail(head_text, parsed_tail)
 
-def prepend_child_string(head_item: JsonLib.Json, parsed_tail: Maybe<&2, List<&2, String>>) -> Maybe<&2, List<&2, String>>:
-  prepend_child_text(JsonLib.as_str(head_item), parsed_tail)
+def prepend_child_string(head_item: Json.Val, parsed_tail: Maybe<&2, List<&2, String>>) -> Maybe<&2, List<&2, String>>:
+  prepend_child_text(JsonAdapter.as_str(head_item), parsed_tail)
 
-def extract_child_strings(child_items: List<&2, JsonLib.Json>) -> Maybe<&2, List<&2, String>>:
+def extract_child_strings(child_items: List<&2, Json.Val>) -> Maybe<&2, List<&2, String>>:
   match child_items:
     case Nil{}:
       Some{Nil{}}
@@ -156,64 +156,64 @@ def finish_tree_node(tree_hash_text: String, parsed_entries: List<&2, Reading.Ch
     case Some{child_hashes}:
       Some{Make{tree_hash_text, parsed_entries, child_hashes}}
 
-def finish_children_strings(tree_hash_text: String, parsed_entries: List<&2, Reading.ChainEntry>, items_maybe: Maybe<&2, List<&2, JsonLib.Json>>) -> Maybe<&2, StateTreeNode>:
+def finish_children_strings(tree_hash_text: String, parsed_entries: List<&2, Reading.ChainEntry>, items_maybe: Maybe<&2, List<&2, Json.Val>>) -> Maybe<&2, StateTreeNode>:
   match items_maybe:
     case None{}:
       None{}
     case Some{child_items}:
       finish_tree_node(tree_hash_text, parsed_entries, extract_child_strings(child_items))
 
-def extract_children_array(tree_hash_text: String, parsed_entries: List<&2, Reading.ChainEntry>, children_maybe: Maybe<&2, JsonLib.Json>) -> Maybe<&2, StateTreeNode>:
+def extract_children_array(tree_hash_text: String, parsed_entries: List<&2, Reading.ChainEntry>, children_maybe: Maybe<&2, Json.Val>) -> Maybe<&2, StateTreeNode>:
   match children_maybe:
     case None{}:
       None{}
     case Some{children_json}:
-      finish_children_strings(tree_hash_text, parsed_entries, JsonLib.as_arr(children_json))
+      finish_children_strings(tree_hash_text, parsed_entries, JsonAdapter.as_arr(children_json))
 
-def extract_children(+document: JsonLib.Json, tree_hash_text: String, entries_maybe: Maybe<&2, List<&2, Reading.ChainEntry>>) -> Maybe<&2, StateTreeNode>:
+def extract_children(+document: Json.Val, tree_hash_text: String, entries_maybe: Maybe<&2, List<&2, Reading.ChainEntry>>) -> Maybe<&2, StateTreeNode>:
   match entries_maybe:
     case None{}:
       None{}
     case Some{parsed_entries}:
-      extract_children_array(tree_hash_text, parsed_entries, JsonLib.get(document, "children"))
+      extract_children_array(tree_hash_text, parsed_entries, JsonAdapter.get_field(document, "children"))
 
-def extract_entry_items(+document: JsonLib.Json, tree_hash_text: String, items_maybe: Maybe<&2, List<&2, JsonLib.Json>>) -> Maybe<&2, StateTreeNode>:
+def extract_entry_items(+document: Json.Val, tree_hash_text: String, items_maybe: Maybe<&2, List<&2, Json.Val>>) -> Maybe<&2, StateTreeNode>:
   match items_maybe:
     case None{}:
       None{}
     case Some{entry_items}:
       extract_children(document, tree_hash_text, parse_entry_list(entry_items))
 
-def extract_entry_array(+document: JsonLib.Json, tree_hash_text: String, entries_maybe: Maybe<&2, JsonLib.Json>) -> Maybe<&2, StateTreeNode>:
+def extract_entry_array(+document: Json.Val, tree_hash_text: String, entries_maybe: Maybe<&2, Json.Val>) -> Maybe<&2, StateTreeNode>:
   match entries_maybe:
     case None{}:
       None{}
     case Some{entries_json}:
-      extract_entry_items(document, tree_hash_text, JsonLib.as_arr(entries_json))
+      extract_entry_items(document, tree_hash_text, JsonAdapter.as_arr(entries_json))
 
-def extract_with_tree_entries(+document: JsonLib.Json, hash_text_maybe: Maybe<&2, String>, entries_maybe: Maybe<&2, JsonLib.Json>) -> Maybe<&2, StateTreeNode>:
+def extract_with_tree_entries(+document: Json.Val, hash_text_maybe: Maybe<&2, String>, entries_maybe: Maybe<&2, Json.Val>) -> Maybe<&2, StateTreeNode>:
   match hash_text_maybe:
     case None{}:
       None{}
     case Some{tree_hash_text}:
       extract_entry_array(document, tree_hash_text, entries_maybe)
 
-def extract_with_tree_hash(+document: JsonLib.Json, hash_maybe: Maybe<&2, JsonLib.Json>) -> Maybe<&2, StateTreeNode>:
+def extract_with_tree_hash(+document: Json.Val, hash_maybe: Maybe<&2, Json.Val>) -> Maybe<&2, StateTreeNode>:
   match hash_maybe:
     case None{}:
       None{}
     case Some{hash_json}:
-      extract_with_tree_entries(document, JsonLib.as_str(hash_json), JsonLib.get(document, "entries"))
+      extract_with_tree_entries(document, JsonAdapter.as_str(hash_json), JsonAdapter.get_field(document, "entries"))
 
-def extract_tree_fields(+document: JsonLib.Json) -> Maybe<&2, StateTreeNode>:
-  extract_with_tree_hash(document, JsonLib.get(document, "hash"))
+def extract_tree_fields(+document: Json.Val) -> Maybe<&2, StateTreeNode>:
+  extract_with_tree_hash(document, JsonAdapter.get_field(document, "hash"))
 
-def tree_from_parse(parse_result: Result<&2, &2, String, JsonLib.Json>) -> Maybe<&2, StateTreeNode>:
+def tree_from_parse(parse_result: Maybe<&2, Json.Val>) -> Maybe<&2, StateTreeNode>:
   match parse_result:
-    case Fail{parse_error}:
+    case None{}:
       None{}
-    case Done{+document}:
+    case Some{+document}:
       extract_tree_fields(document)
 
 def parse_tree_document(stored_text: String) -> Maybe<&2, StateTreeNode>:
-  tree_from_parse(JsonLib.parse(stored_text))
+  tree_from_parse(JsonAdapter.parse_text(stored_text))
