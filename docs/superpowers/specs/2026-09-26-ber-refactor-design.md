@@ -36,13 +36,15 @@ Delete every `#` comment in `src/*.bend`, `LAWS.bend`, `PROOF.bend`, `tests/*.be
 
 Nothing in this branch. No `IO.args` CLI enters `ber/`. When reactivated, `bend-cli` imports `ber-core` by hash and owns all arg parsing and `open/run_sess` wiring.
 
-## 5. MyLSM 0.3.1.0 only
+## 5. MyLSM 0.3.1.0 + binding deletion
 
-Code already pins `0x0ae7ac793853e753f5f74c16e06ee078` everywhere (mylsm + `src/hub_sha/sha256.bend` subpath + `Wal`). Only change: fix stale `v0.2.0` comment in `src/MyLsmBinding.bend:5` to `v0.3.1.0` (done as part of comment rewrite) and record the pin line in README. No code change.
+Pin already `0x0ae7ac793853e753f5f74c16e06ee078` everywhere (mylsm + `src/hub_sha/sha256.bend` subpath). No code change for the version.
+
+Binding decision (2026-09-26): **delete `src/MyLsmBinding.bend` entirely.** The `store/load/remove_value` wrappers are 1:1 pass-throughs over `sput/sget/sdel` with zero logic — wrappers only earn their keep with complex logic. Consumers call `MyLsmStore.sput/sget/sdel` directly (same `Sess` types, same do-block shapes). The old "only the binding names MyLSM" rule is dropped; the honest rule is: MyLSM effects are called directly, MyLSM is still pinned by hash. 14 call sites in 3 files (`ContentObject` 2, `Staging` 3, `History` 9).
 
 ## 6. Dead code
 
-`src/` only, verified by `rg` zero-usage before each deletion, `bend PROOF.bend` green after. Confirmed dead (usage search 2026-09-26): `Merging.find_common_ancestor` (defined, never called — `merge_with_ancestor_search` inlines the same ancestor-set + first-common walk), `MyLsmBinding.store_batch` (binding wrapper with zero callers). Everything else checked is live: `merge_succeeded/conflict_key_count/success_commit_of/success_certificate_of/pruned_count_of` and all `cert_*` accessors are used by tests or `Certificate.bend`; `History.empty_*` are used internally; `law_check_passed` used by `Certificate`. Tests/benches keep their mains. Laws keep every law (coverage owns them, even single-case `L002`s).
+`src/` only, verified by `rg` zero-usage before each deletion, `bend PROOF.bend` green after. Confirmed dead (usage search 2026-09-26): `Merging.find_common_ancestor` (defined, never called — `merge_with_ancestor_search` inlines the same ancestor-set + first-common walk). `MyLsmBinding.store_batch` dies with the binding file (§5). Everything else checked is live: `merge_succeeded/conflict_key_count/success_commit_of/success_certificate_of/pruned_count_of` and all `cert_*` accessors are used by tests or `Certificate.bend`; `History.empty_*` are used internally; `law_check_passed` used by `Certificate`. Tests/benches keep their mains. Laws keep every law (coverage owns them, even single-case `L002`s).
 
 ## 7. Bolt
 

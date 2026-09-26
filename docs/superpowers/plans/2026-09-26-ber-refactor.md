@@ -38,7 +38,6 @@ ber/
 │   ├── JsonAdapter.bend               # NEW (Task 2) — sole JSON owner
 │   ├── LogicalKey.bend                # comments rewritten (Task 9)
 │   ├── Merging.bend                   # find_common_ancestor removed (Task 8) + comments (Task 9)
-│   ├── MyLsmBinding.bend              # store_batch + WalTypes removed, v0.3.1.0 comment (Task 8)
 │   ├── Reading.bend                   # comments rewritten (Task 9)
 │   ├── Staging.bend                   # migrated to adapter + comments (Task 6)
 │   └── StateTree.bend                 # migrated to adapter + comments (Task 4)
@@ -397,7 +396,7 @@ import bend-kit-json@0.3.0.0/json.bend as Json
 # byte-identical text, so the SHA-256 of the text is a stable address.
 # Payloads and references stay strings-only, inside the probed doc shapes.
 # Kit is named for the Val TYPE only; all operations go through JsonAdapter.
-# Effects use only Binding wrappers; MyLsmStore is named for Sess types only.
+# Effects are MyLSM Sess actions composed in do-blocks.
 ```
 
 - [ ] **Step 2: Apply the rename table + structural edits**
@@ -579,7 +578,7 @@ import bend-kit-json@0.3.0.0/json.bend as Json
 # re-materialize on load: 0 / None). Loads re-serialize the parsed fields and
 # compare against the stored text: a mismatch yields None, never corruption.
 # Kit is named for the Val TYPE only; operations go through JsonAdapter.
-# Effects use only Binding wrappers; MyLsmStore is named for Sess types only.
+# Effects are MyLSM Sess actions composed in do-blocks.
 ```
 
 - [ ] **Step 2: Rename table + structural edits**
@@ -763,13 +762,14 @@ git commit -m "refactor(ber-core): drop vendored rootagi json and byte probe"
 
 ---
 
-### Task 8: Dead code removal
+### Task 8: Delete binding shim + dead `find_common_ancestor`
 
 **Files:**
+- Delete: `src/MyLsmBinding.bend`
+- Modify: `src/ContentObject.bend` (2 call sites), `src/Staging.bend` (3), `src/History.bend` (8)
 - Modify: `src/Merging.bend` (delete `find_common_ancestor`, lines 190-194)
-- Modify: `src/MyLsmBinding.bend` (delete `store_batch` + the `WalTypes` import it alone uses)
 
-Confirmed zero-usage by `rg` on 2026-09-26 (spec §6).
+Wrappers are 1:1 pass-throughs with zero logic — deleted per user decision (spec §5). Verified 1:1 signatures on 2026-09-26: `sput(+key,+val)->Sess<Unit>`, `sget(+key)->Sess<Maybe<String>>`, `sdel(+key)->Sess<Unit>` (mylsm.bend lines 129-141).
 
 - [ ] **Step 1: Delete `find_common_ancestor` from `src/Merging.bend`**
 
@@ -782,37 +782,34 @@ def find_common_ancestor(+first_identifier: String, +second_identifier: String) 
     return lca_result
 ```
 
-- [ ] **Step 2: Write the new `src/MyLsmBinding.bend`**
+- [ ] **Step 2: Apply the substitution table (exact strings, 3 files)**
 
-```python
-import Base
-import 0x0ae7ac793853e753f5f74c16e06ee078/mylsm.bend as MyLsmStore
+| Old | New | Sites (14 total) |
+|---|---|---|
+| `Binding.store_value(` | `MyLsmStore.sput(` | ContentObject 1 (line 34), Staging 2 (80, 81), History 3 (214, 220, 229) |
+| `Binding.load_value(` | `MyLsmStore.sget(` | ContentObject 1 (121), Staging 1 (73), History 4 (195, 266, 310, 394) |
+| `Binding.remove_value(` | `MyLsmStore.sdel(` | History 2 (239, 247) |
+| `import ./MyLsmBinding.bend as Binding\n` | `` (delete the line) | ContentObject line 4, Staging line 4, History line 8 |
 
-# PINNED: mylsm v0.3.1.0 = 0x0ae7ac793853e753f5f74c16e06ee078 (hash is the
-# trust anchor; the tag is convenience). Only this file names MyLsmStore
-# effects. MyLSM is a state monad (Sess), not handles: ber-core composes
-# Sess actions in do-blocks and the monad threads Db internally.
-def store_value(+storage_key: String, +stored_value: String) -> MyLsmStore.Sess<&2, Unit>:
-  MyLsmStore.sput(storage_key, stored_value)
+Every site is `<- Binding.x(...)` inside a do-block; the direct call returns the identical `Sess` type, so no surrounding line changes.
 
-def remove_value(+storage_key: String) -> MyLsmStore.Sess<&2, Unit>:
-  MyLsmStore.sdel(storage_key)
-
-def load_value(+storage_key: String) -> MyLsmStore.Sess<&2, Maybe<&2, String>>:
-  MyLsmStore.sget(storage_key)
-```
-
-(This also lands the stale `v0.2.0` → `v0.3.1.0` comment fix from spec §5 and drops the `WalTypes` import only `store_batch` used.)
-
-- [ ] **Step 3: Verify zero usage, gate, commit**
-
-Run: `rg -n "find_common_ancestor|store_batch|WalTypes" src tests benches LAWS.bend PROOF.bend` → no output.
-Run: `bend PROOF.bend` → `All terms check.`
-Run: `bend tests/merging_check.bend` → all PASS.
+- [ ] **Step 3: Delete the shim**
 
 ```bash
-git add src/Merging.bend src/MyLsmBinding.bend
-git commit -m "chore(ber-core): drop dead find_common_ancestor and store_batch"
+git rm src/MyLsmBinding.bend
+```
+
+- [ ] **Step 4: Verify zero usage, gate, commit**
+
+Run: `rg -n "MyLsmBinding|Binding\.|find_common_ancestor|store_batch|WalTypes" src tests benches LAWS.bend PROOF.bend` → no output.
+Run: `bend PROOF.bend` → `All terms check.`
+Run: `bend tests/merging_check.bend` → all PASS.
+Run: `bend tests/commit_read_check.bend` → all PASS.
+Run: `bend tests/reading_check.bend` → all PASS.
+
+```bash
+git add src/Merging.bend src/ContentObject.bend src/Staging.bend src/History.bend
+git commit -m "chore(ber-core): delete binding shim, call sput-sget-sdel directly"
 ```
 
 ---
@@ -1154,7 +1151,6 @@ See `tests/*_check.bend` for complete runnable scenarios (reads across history, 
 | `src/Merging.bend` | three-way union-disjoint merge + LCA |
 | `src/Certificate.bend` | independent merge verification |
 | `src/EqTheory.bend` | reflexivity tower for proofs |
-| `src/MyLsmBinding.bend` | the only file naming MyLSM effects |
 
 ## Benchmarks
 
@@ -1207,7 +1203,7 @@ Summarize: migration evidence (probe PASS), dead code removed, bolt state, remai
 
 ## Self-review
 
-- **Spec coverage:** §1 laws-vs-tests → no test deletion (tests are IO wiring; verified no pure-duplicate asserts worth removing — Task 7 sweep keeps all 9 checks). §2 adapter+kit → Tasks 1-7 (probe load-bearing first, per spec). §3 comments → Tasks 3-6 Step 3 + Task 9. §4 bend-cli → absent by design. §5 mylsm comment fix → Task 8 Step 2. §6 dead code → Task 8 (exactly the two confirmed defs + WalTypes import). §7 bolt → Task 0 + gates in 7/9/11. §8 README → Task 10. §9 testing → gates every task + Task 11.
+- **Spec coverage:** §1 laws-vs-tests → no test deletion (tests are IO wiring; verified no pure-duplicate asserts worth removing — Task 7 sweep keeps all 9 checks). §2 adapter+kit → Tasks 1-7 (probe load-bearing first, per spec). §3 comments → Tasks 3-6 Step 3 + Task 9. §4 bend-cli → absent by design. §5 binding deletion + mylsm pin → Task 8 (shim deleted, 14 direct-call swaps, `find_common_ancestor` removed). §6 dead code → Task 8 (folded into binding deletion). §7 bolt → Task 0 + gates in 7/9/11. §8 README → Task 10. §9 testing → gates every task + Task 11.
 - **Placeholders:** none — every code-changing step shows full code or exact-string tables; probe/adapter/README/spec rows are complete.
 - **Type consistency:** `Json.Val` / `JsonAdapter.{make_str,make_arr,make_kv,make_obj,parse_text,get_field,as_str,as_arr,encode_canonical}` identical across Tasks 2-6; `Sigma<&2, &2, String, _ => Json.Val>` matches kit's `items.obj` shape; `Maybe<&2, Json.Val>` replaces `Result<&2, &2, String, JsonLib.Json>` everywhere it appeared (`object_from_parse_result`, `tree_from_parse`, `commit_from_parse`, `index_from_text`).
 - **Bend legality:** adapter `fold_fields` shrinks in argument position 1; probe `probe_fold` same; constructor patterns `case Json.Str{text}:` / `case Merging.MergedEntries{...}:` are established in-repo (Certificate.bend); no `match` on computed values introduced; no forward references (adapter order: make_str/make_arr/make_kv/fold_pair/fold_fields/make_obj/parse_text/get_field/as_str/as_arr/encode_canonical).
