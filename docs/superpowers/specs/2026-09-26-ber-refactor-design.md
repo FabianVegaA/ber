@@ -57,3 +57,28 @@ New root `README.md`: what ber-core is (convergence + proof primitive over MyLSM
 ## 9. Testing
 
 `bend PROOF.bend` green after every step. Byte-probe (kit vs rootagi on our 4 doc shapes) runs FIRST and passes before any consumer changes. Each `tests/*_check.bend` run green after migration (canonical bytes + Maybe-branches). Differential JSON check vs Python `json` re-run (roundtrip + key order vs `json.dumps(..., sort_keys=True)`). `bolt` no-error. Final: full `bend PROOF.bend` + `bolt` + all checks in one pass before merge.
+
+## 10. Public API (added 2026-09-26, after the migration)
+
+Purpose (user): ber-core merges separately-changed data states and proves the
+result correct instead of trusting it; it diffs, combines, and returns a
+verifiable certificate — or says explicitly it cannot guarantee it. Users are
+tool builders (data VCS via ber-cli, collaborative editors, multi-leader
+DBs, finance/ML/IaC). Values are multi-type by design (text, structured
+document, generic binary blob — parquet-class files as opaque bytes, never
+format-specific); row-level formats stay a future consumer adapter.
+
+Shape (mirrors mylsm.bend: root facade, levels, one comment per def):
+`ber.bend` at root (Level 2: 8 domain delegates 1:1; Level 1: `commit_value`,
+`remove_record`, `compare_summary`, `merge_and_verify`, `format_report` —
+composed, opaque String results). `src/Store.bend` owns the `Op`/`Handle`
+session monad and is the ONLY file naming MyLSM (newtype over Sess/Db;
+do-blocks desugar via `Op.bind`/`Op.pure`, probe-verified). `src/Value.bend`
+owns `Value{Text,Object,Blob}` with tagged canonical forms
+(`{"t"}`,`{"o"}`,`{"b":hex}` — injective, hash-stable; hex via pinned
+bend-codec-lib). Consumers import `Ber` + `Store` (+ `Value` for
+constructors); no demo file — the 11 checks plus the README quickstart
+(which runs green) are the acceptance. Naming rules: `value` never `text`;
+`Store` not `Session` (ber already means stage labels by session).
+Laws for Value roundtrips stay human-owned: exact claim texts prepared by
+the worker, pasted by the human, proofs by the worker.
