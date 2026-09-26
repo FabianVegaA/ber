@@ -2,19 +2,21 @@ import Base
 import ./LogicalKey.bend as LogicalKey
 import ./ContentObject.bend as ContentObject
 import ./MyLsmBinding.bend as Binding
+import ./JsonAdapter.bend as JsonAdapter
 import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
-import ../vendor/json/json.bend as JsonLib
+import bend-kit-json@0.3.0.0/json.bend as Json
 
-# Uncommitted working set. Staged keys live at stage/{session}/{ns}/{id};
-# the per-session key manifest lives at stage-index/{session} (a JSON string
-# list). Point operations ONLY — no prefix scan anywhere. Effects via Binding;
-# MyLsmStore named for Sess types only.
+# Uncommitted working set. Staged values live at stage/{session}/{ns}/{id};
+# the per-session key manifest lives at stage-index/{session} as a canonical
+# JSON string list. Point operations only — no prefix scan anywhere.
+# Kit is named for the Val TYPE only; operations go through JsonAdapter.
+# Effects are MyLSM Sess actions composed in do-blocks.
 
 def stage_index_key(+session_identifier: String) -> String:
   "stage-index/" ++ session_identifier
 
 def serialize_key_list(staged_keys: List<&2, String>) -> String:
-  JsonLib.stringify(JsonLib.arr(ContentObject.encode_each_reference(staged_keys)))
+  JsonAdapter.encode_canonical(JsonAdapter.make_arr(ContentObject.encode_each_reference(staged_keys)))
 
 def index_from_strings(strings_maybe: Maybe<&2, List<&2, String>>) -> List<&2, String>:
   match strings_maybe:
@@ -23,26 +25,26 @@ def index_from_strings(strings_maybe: Maybe<&2, List<&2, String>>) -> List<&2, S
     case Some{key_texts}:
       key_texts
 
-def index_from_document(items_maybe: Maybe<&2, List<&2, JsonLib.Json>>) -> List<&2, String>:
+def index_from_document(items_maybe: Maybe<&2, List<&2, Json.Val>>) -> List<&2, String>:
   match items_maybe:
     case None{}:
       Nil{}
     case Some{json_items}:
       index_from_strings(ContentObject.extract_each_string(json_items))
 
-def index_from_text(parse_result: Result<&2, &2, String, JsonLib.Json>) -> List<&2, String>:
+def index_from_text(parse_result: Maybe<&2, Json.Val>) -> List<&2, String>:
   match parse_result:
-    case Fail{parse_error}:
+    case None{}:
       Nil{}
-    case Done{document}:
-      index_from_document(JsonLib.as_arr(document))
+    case Some{document}:
+      index_from_document(JsonAdapter.as_arr(document))
 
 def parse_stage_index(stored_maybe: Maybe<&2, String>) -> List<&2, String>:
   match stored_maybe:
     case None{}:
       Nil{}
     case Some{stored_text}:
-      index_from_text(JsonLib.parse(stored_text))
+      index_from_text(JsonAdapter.parse_text(stored_text))
 
 def decide_contains(head_matches: Bool, recursive_result: Bool) -> Bool:
   match head_matches:
