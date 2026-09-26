@@ -4,7 +4,7 @@ import ./LogicalKey.bend as LogicalKey
 import ./Comparison.bend as Comparison
 import ./StateTree.bend as StateTree
 import ./History.bend as History
-import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
+import ./Store.bend as Store
 
 # Three-way merge, strategy "union-disjoint". The pure core decides per key
 # from (base, first, second) with an explicit truth table: equal inputs take
@@ -165,18 +165,18 @@ def decide_visited_member(already_visited: Bool, +head_identifier: String, tail_
       Con{head_identifier, tail_result}
 
 # Breadth-first ancestor collection with fuel.
-def collect_ancestors(remaining_fuel: Nat, visit_queue: List<&2, String>, +visited_accum: List<&2, String>) -> MyLsmStore.Sess<&2, List<&2, String>>:
+def collect_ancestors(remaining_fuel: Nat, visit_queue: List<&2, String>, +visited_accum: List<&2, String>) -> Store.Op<&2, List<&2, String>>:
   match remaining_fuel:
     case 0n:
-      do MyLsmStore.Sess<&2, List<&2, String>>:
+      do Store.Op<&2, List<&2, String>>:
         return visited_accum
     case 1n+fuel_left:
       match visit_queue:
         case Nil{}:
-          do MyLsmStore.Sess<&2, List<&2, String>>:
+          do Store.Op<&2, List<&2, String>>:
             return visited_accum
         case Con{+head_identifier, remaining_queue}:
-          do MyLsmStore.Sess<&2, List<&2, String>>:
+          do Store.Op<&2, List<&2, String>>:
             commit_maybe : Maybe<&2, History.Commit> <- History.load_commit(head_identifier)
             +extended_queue : List<&2, String> = List.append(&2, String, remaining_queue, filter_unvisited(parent_list_or_empty(commit_maybe), visited_accum))
             tail_result : List<&2, String> <- collect_ancestors(fuel_left, extended_queue, Con{head_identifier, visited_accum})
@@ -191,12 +191,12 @@ def decide_lca_found(is_common: Bool, +commit_identifier: String, tail_result: M
       tail_result
 
 # Walks the second branch for the first ancestor-set hit.
-def find_first_common(+ancestor_set: List<&2, String>, remaining_fuel: Nat, +commit_identifier: String) -> MyLsmStore.Sess<&2, Maybe<&2, String>>:
+def find_first_common(+ancestor_set: List<&2, String>, remaining_fuel: Nat, +commit_identifier: String) -> Store.Op<&2, Maybe<&2, String>>:
   match remaining_fuel:
     case 0n:
-      History.empty_string_maybe()
+      History.empty_text_maybe()
     case 1n+fuel_left:
-      do MyLsmStore.Sess<&2, Maybe<&2, String>>:
+      do Store.Op<&2, Maybe<&2, String>>:
         commit_maybe : Maybe<&2, History.Commit> <- History.load_commit(commit_identifier)
         tail_result : Maybe<&2, String> <- find_first_common(ancestor_set, fuel_left, History.first_parent_text(commit_maybe))
         return decide_lca_found(list_contains_member(commit_identifier, ancestor_set), commit_identifier, tail_result)
@@ -366,13 +366,13 @@ def merge_entry_lists(+base_entries: List<&2, Reading.ChainEntry>, +first_entrie
   finalize_merge(merge_unique_keys(unique_seen_keys(all_candidate_entries(base_entries, first_entries, second_entries), Nil{}), base_entries, first_entries, second_entries))
 
 # Wraps conflicting keys as a Sess result.
-def conflict_merge_result(conflicting_keys: List<&2, LogicalKey.LogicalKey>) -> MyLsmStore.Sess<&2, MergeResult>:
-  do MyLsmStore.Sess<&2, MergeResult>:
+def conflict_merge_result(conflicting_keys: List<&2, LogicalKey.LogicalKey>) -> Store.Op<&2, MergeResult>:
+  do Store.Op<&2, MergeResult>:
     return MergeConflict{conflicting_keys}
 
 # Wraps an unprovable reason as a Sess result.
-def unprovable_merge_result(+reason: String) -> MyLsmStore.Sess<&2, MergeResult>:
-  do MyLsmStore.Sess<&2, MergeResult>:
+def unprovable_merge_result(+reason: String) -> Store.Op<&2, MergeResult>:
+  do Store.Op<&2, MergeResult>:
     return MergeUnprovable{reason}
 
 # Issues the certificate with pairwise-compatibility evidence.
@@ -380,15 +380,15 @@ def build_merge_certificate(+first_parent_commit: String, +second_parent_commit:
   Make{first_parent_commit, second_parent_commit, base_commit, result_tree_hash, strategy_name, Con{Check{"pairwise-compatibility", True{}}, Nil{}}}
 
 # Persists tree, commit and index for merged entries.
-def persist_merged_result(+first_identifier: String, +second_identifier: String, +base_identifier: String, +merged_entries: List<&2, Reading.ChainEntry>) -> MyLsmStore.Sess<&2, MergeResult>:
-  do MyLsmStore.Sess<&2, MergeResult>:
+def persist_merged_result(+first_identifier: String, +second_identifier: String, +base_identifier: String, +merged_entries: List<&2, Reading.ChainEntry>) -> Store.Op<&2, MergeResult>:
+  do Store.Op<&2, MergeResult>:
     +tree_hash_value : String <- History.persist_tree(merged_entries)
     +resulting_commit : History.Commit <- History.persist_commit(Con{first_identifier, Con{second_identifier, Nil{}}}, Con{History.Field{"strategy", "union-disjoint"}, Nil{}}, tree_hash_value)
     indexed_unit : Unit <- History.write_each_index(merged_entries, resulting_commit)
     return MergeSuccess{resulting_commit, build_merge_certificate(first_identifier, second_identifier, base_identifier, tree_hash_value, "union-disjoint")}
 
 # Persists merges; conflicts become results directly.
-def persist_merge_outcome(merge_outcome: MergeOutcome, +first_identifier: String, +second_identifier: String, +base_identifier: String) -> MyLsmStore.Sess<&2, MergeResult>:
+def persist_merge_outcome(merge_outcome: MergeOutcome, +first_identifier: String, +second_identifier: String, +base_identifier: String) -> Store.Op<&2, MergeResult>:
   match merge_outcome:
     case ConflictingKeys{conflicting_keys}:
       conflict_merge_result(conflicting_keys)
@@ -396,8 +396,8 @@ def persist_merge_outcome(merge_outcome: MergeOutcome, +first_identifier: String
       persist_merged_result(first_identifier, second_identifier, base_identifier, merged_entries)
 
 # Loads the three trees and merges them.
-def merge_three_way(+first_identifier: String, +second_identifier: String, +base_identifier: String) -> MyLsmStore.Sess<&2, MergeResult>:
-  do MyLsmStore.Sess<&2, MergeResult>:
+def merge_three_way(+first_identifier: String, +second_identifier: String, +base_identifier: String) -> Store.Op<&2, MergeResult>:
+  do Store.Op<&2, MergeResult>:
     base_tree_maybe : Maybe<&2, StateTree.StateTreeNode> <- History.read_tree_at(base_identifier)
     first_tree_maybe : Maybe<&2, StateTree.StateTreeNode> <- History.read_tree_at(first_identifier)
     second_tree_maybe : Maybe<&2, StateTree.StateTreeNode> <- History.read_tree_at(second_identifier)
@@ -409,7 +409,7 @@ def merge_three_way(+first_identifier: String, +second_identifier: String, +base
     return persisted_result
 
 # Merges on the ancestor; missing ancestors are unprovable.
-def branch_lca_search(lca_maybe: Maybe<&2, String>, +first_identifier: String, +second_identifier: String) -> MyLsmStore.Sess<&2, MergeResult>:
+def branch_lca_search(lca_maybe: Maybe<&2, String>, +first_identifier: String, +second_identifier: String) -> Store.Op<&2, MergeResult>:
   match lca_maybe:
     case None{}:
       unprovable_merge_result("no-common-ancestor")
@@ -417,15 +417,15 @@ def branch_lca_search(lca_maybe: Maybe<&2, String>, +first_identifier: String, +
       merge_three_way(first_identifier, second_identifier, base_identifier)
 
 # Finds the lowest common ancestor, then merges.
-def merge_with_ancestor_search(+first_identifier: String, +second_identifier: String) -> MyLsmStore.Sess<&2, MergeResult>:
-  do MyLsmStore.Sess<&2, MergeResult>:
+def merge_with_ancestor_search(+first_identifier: String, +second_identifier: String) -> Store.Op<&2, MergeResult>:
+  do Store.Op<&2, MergeResult>:
     ancestor_set : List<&2, String> <- collect_ancestors(10000n, Con{first_identifier, Nil{}}, Nil{})
     lca_maybe : Maybe<&2, String> <- find_first_common(ancestor_set, 10000n, second_identifier)
     merged_result : MergeResult <- branch_lca_search(lca_maybe, first_identifier, second_identifier)
     return merged_result
 
 # Only union-disjoint merges; anything else is unprovable.
-def decide_strategy_name(strategy_matches: Bool, +first_identifier: String, +second_identifier: String) -> MyLsmStore.Sess<&2, MergeResult>:
+def decide_strategy_name(strategy_matches: Bool, +first_identifier: String, +second_identifier: String) -> Store.Op<&2, MergeResult>:
   match strategy_matches:
     case True{}:
       merge_with_ancestor_search(first_identifier, second_identifier)
@@ -433,5 +433,5 @@ def decide_strategy_name(strategy_matches: Bool, +first_identifier: String, +sec
       unprovable_merge_result("unknown-strategy")
 
 # Merges two commits by strategy name.
-def merge_commits(+first_identifier: String, +second_identifier: String, +strategy_name: String) -> MyLsmStore.Sess<&2, MergeResult>:
+def merge_commits(+first_identifier: String, +second_identifier: String, +strategy_name: String) -> Store.Op<&2, MergeResult>:
   decide_strategy_name(String.eq(strategy_name, "union-disjoint"), first_identifier, second_identifier)

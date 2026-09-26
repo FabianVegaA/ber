@@ -2,18 +2,19 @@ import Base
 import ./ContentHash.bend as ContentHash
 import ./LogicalKey.bend as LogicalKey
 import ./JsonAdapter.bend as JsonAdapter
-import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
+import ./Value.bend as Value
+import ./Store.bend as Store
 import bend-kit-json@0.3.0.0/json.bend as Json
 
 # Content-addressed objects persisted as canonical JSON: equal content gives
 # byte-identical text, so the SHA-256 of the text is a stable address.
-# Payloads and references stay strings-only, inside the probed doc shapes.
-# Kit is named for the Val TYPE only; all operations go through JsonAdapter.
-# Effects are MyLSM Sess actions composed in do-blocks.
+# Payloads are multi-type Values (text, document, blob); references stay
+# string lists. Kit and Value are named for TYPES only; all operations go
+# through JsonAdapter and Value. Effects are Store Op actions in do-blocks.
 
 # Addressable payload with content hash and references.
 type ContentObject is Data:
-  Make{content_hash: String, payload: String, references: List<&2, String>}
+  Make{content_hash: String, payload: Value.Value, references: List<&2, String>}
 
 # Encodes each reference string as a JSON string.
 def encode_each_reference(references: List<&2, String>) -> List<&2, Json.Val>:
@@ -24,25 +25,25 @@ def encode_each_reference(references: List<&2, String>) -> List<&2, Json.Val>:
       Con{JsonAdapter.make_str(head_reference), encode_each_reference(remaining_references)}
 
 # Builds the payload/references field list.
-def encode_reference_list(payload: String, references: List<&2, String>) -> List<&2, Sigma<&2, &2, String, _ => Json.Val>>:
-  Con{JsonAdapter.make_kv("payload", JsonAdapter.make_str(payload)), Con{JsonAdapter.make_kv("references", JsonAdapter.make_arr(encode_each_reference(references))), Nil{}}}
+def encode_reference_list(payload: Value.Value, references: List<&2, String>) -> List<&2, Sigma<&2, &2, String, _ => Json.Val>>:
+  Con{JsonAdapter.make_kv("payload", Value.value_to_json(payload)), Con{JsonAdapter.make_kv("references", JsonAdapter.make_arr(encode_each_reference(references))), Nil{}}}
 
 # Canonical text of a content object; the hashed bytes.
-def canonical_content(payload: String, references: List<&2, String>) -> String:
+def canonical_content(payload: Value.Value, references: List<&2, String>) -> String:
   JsonAdapter.encode_canonical(JsonAdapter.make_obj(encode_reference_list(payload, references)))
 
 # Persists the text under its hash and returns the hash.
-def finish_store(+content_hash: String, +canonical_text: String) -> MyLsmStore.Sess<&2, String>:
-  do MyLsmStore.Sess<&2, String>:
-    stored_unit : Unit <- MyLsmStore.sput(LogicalKey.build_object_storage_key(content_hash), canonical_text)
+def finish_store(+content_hash: String, +canonical_text: String) -> Store.Op<&2, String>:
+  do Store.Op<&2, String>:
+    stored_unit : Unit <- Store.oput(LogicalKey.build_object_storage_key(content_hash), canonical_text)
     return content_hash
 
 # Hashes the text, then stores it.
-def wrap_store(+canonical_text: String) -> MyLsmStore.Sess<&2, String>:
+def wrap_store(+canonical_text: String) -> Store.Op<&2, String>:
   finish_store(ContentHash.compute_sha256_hex(canonical_text), canonical_text)
 
 # SHA-256 of the canonical text; the address consumers store and load by.
-def store_content_object(payload: String, references: List<&2, String>) -> MyLsmStore.Sess<&2, String>:
+def store_content_object(payload: Value.Value, references: List<&2, String>) -> Store.Op<&2, String>:
   wrap_store(canonical_content(payload, references))
 
 # Conses decoded text onto the tail, failing closed on None.
@@ -74,36 +75,36 @@ def extract_each_string(json_items: List<&2, Json.Val>) -> Maybe<&2, List<&2, St
       prepend_string(head_item, extract_each_string(remaining_items))
 
 # Reassembles the object once references decode.
-def wrap_reference_texts(content_hash: String, payload_text: String, texts_maybe: Maybe<&2, List<&2, String>>) -> Maybe<&2, ContentObject>:
+def wrap_reference_texts(content_hash: String, payload_value: Value.Value, texts_maybe: Maybe<&2, List<&2, String>>) -> Maybe<&2, ContentObject>:
   match texts_maybe:
     case None{}:
       None{}
     case Some{reference_texts}:
-      Some{Make{content_hash, payload_text, reference_texts}}
+      Some{Make{content_hash, payload_value, reference_texts}}
 
 # Unwraps the references array, then reassembles.
-def finish_object(content_hash: String, payload_text: String, references_maybe: Maybe<&2, List<&2, Json.Val>>) -> Maybe<&2, ContentObject>:
+def finish_object(content_hash: String, payload_value: Value.Value, references_maybe: Maybe<&2, List<&2, Json.Val>>) -> Maybe<&2, ContentObject>:
   match references_maybe:
     case None{}:
       None{}
     case Some{reference_items}:
-      wrap_reference_texts(content_hash, payload_text, extract_each_string(reference_items))
+      wrap_reference_texts(content_hash, payload_value, extract_each_string(reference_items))
 
 # Unwraps the references field, then finishes.
-def extract_with_references(content_hash: String, payload_text: String, references_maybe: Maybe<&2, Json.Val>) -> Maybe<&2, ContentObject>:
+def extract_with_references(content_hash: String, payload_value: Value.Value, references_maybe: Maybe<&2, Json.Val>) -> Maybe<&2, ContentObject>:
   match references_maybe:
     case None{}:
       None{}
     case Some{references_json}:
-      finish_object(content_hash, payload_text, JsonAdapter.as_arr(references_json))
+      finish_object(content_hash, payload_value, JsonAdapter.as_arr(references_json))
 
-# Unwraps the payload text, then continues.
-def extract_with_payload_text(content_hash: String, payload_text: Maybe<&2, String>, references_maybe: Maybe<&2, Json.Val>) -> Maybe<&2, ContentObject>:
-  match payload_text:
+# Unwraps the payload value, then continues.
+def extract_with_payload_value(content_hash: String, payload_value_maybe: Maybe<&2, Value.Value>, references_maybe: Maybe<&2, Json.Val>) -> Maybe<&2, ContentObject>:
+  match payload_value_maybe:
     case None{}:
       None{}
-    case Some{actual_payload}:
-      extract_with_references(content_hash, actual_payload, references_maybe)
+    case Some{payload_value}:
+      extract_with_references(content_hash, payload_value, references_maybe)
 
 # Unwraps the payload field, then continues.
 def extract_with_payload(content_hash: String, +document: Json.Val, payload_maybe: Maybe<&2, Json.Val>) -> Maybe<&2, ContentObject>:
@@ -111,7 +112,7 @@ def extract_with_payload(content_hash: String, +document: Json.Val, payload_mayb
     case None{}:
       None{}
     case Some{payload_json}:
-      extract_with_payload_text(content_hash, JsonAdapter.as_str(payload_json), JsonAdapter.get_field(document, "references"))
+      extract_with_payload_value(content_hash, Value.value_from_json(payload_json), JsonAdapter.get_field(document, "references"))
 
 # Builds the object from parsed JSON; None on malformed input.
 def object_from_parse_result(content_hash: String, parse_result: Maybe<&2, Json.Val>) -> Maybe<&2, ContentObject>:
@@ -134,13 +135,13 @@ def parse_loaded_object(content_hash: String, stored_maybe: Maybe<&2, String>) -
       parse_canonical_object(content_hash, stored_text)
 
 # None on missing or malformed stored text; never returns a corrupt object.
-def load_content_object(+content_hash: String) -> MyLsmStore.Sess<&2, Maybe<&2, ContentObject>>:
-  do MyLsmStore.Sess<&2, Maybe<&2, ContentObject>>:
-    stored_maybe : Maybe<&2, String> <- MyLsmStore.sget(LogicalKey.build_object_storage_key(content_hash))
+def load_content_object(+content_hash: String) -> Store.Op<&2, Maybe<&2, ContentObject>>:
+  do Store.Op<&2, Maybe<&2, ContentObject>>:
+    stored_maybe : Maybe<&2, String> <- Store.oget(LogicalKey.build_object_storage_key(content_hash))
     return parse_loaded_object(content_hash, stored_maybe)
 
 # Projects the payload out of an object.
-def object_payload_of(content_object: ContentObject) -> String:
+def object_payload_of(content_object: ContentObject) -> Value.Value:
   match content_object:
     case Make{content_hash, payload, references}:
       payload

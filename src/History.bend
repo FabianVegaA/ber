@@ -6,7 +6,8 @@ import ./StateTree.bend as StateTree
 import ./Staging.bend as Staging
 import ./ContentObject.bend as ContentObject
 import ./JsonAdapter.bend as JsonAdapter
-import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
+import ./Value.bend as Value
+import ./Store.bend as Store
 import bend-kit-json@0.3.0.0/json.bend as Json
 
 # Linear history: staging -> merged tree -> commit -> per-key version index.
@@ -14,7 +15,7 @@ import bend-kit-json@0.3.0.0/json.bend as Json
 # re-materialize on load: 0 / None). Loads re-serialize the parsed fields and
 # compare against the stored text: a mismatch yields None, never corruption.
 # Kit is named for the Val TYPE only; operations go through JsonAdapter.
-# Effects are MyLSM Sess actions composed in do-blocks.
+# Effects are Store Op actions composed in do-blocks. Reads resolve to Values.
 
 # One metadata key/value field.
 type CommitMeta is Data:
@@ -215,74 +216,74 @@ def parse_commit(requested_identifier: String, stored_maybe: Maybe<&2, String>) 
       parse_commit_text(requested_identifier, stored_text)
 
 # Loads and verifies a commit by identifier.
-def load_commit(+requested_identifier: String) -> MyLsmStore.Sess<&2, Maybe<&2, Commit>>:
-  do MyLsmStore.Sess<&2, Maybe<&2, Commit>>:
-    stored_maybe : Maybe<&2, String> <- MyLsmStore.sget(LogicalKey.build_commit_storage_key(requested_identifier))
+def load_commit(+requested_identifier: String) -> Store.Op<&2, Maybe<&2, Commit>>:
+  do Store.Op<&2, Maybe<&2, Commit>>:
+    stored_maybe : Maybe<&2, String> <- Store.oget(LogicalKey.build_commit_storage_key(requested_identifier))
     return parse_commit(requested_identifier, stored_maybe)
 
 # Empty Sess result of unit type.
-def empty_unit() -> MyLsmStore.Sess<&2, Unit>:
-  do MyLsmStore.Sess<&2, Unit>:
+def empty_unit() -> Store.Op<&2, Unit>:
+  do Store.Op<&2, Unit>:
     return Unit{}
 
 # Empty Sess result of entry-list type.
-def empty_pair_list() -> MyLsmStore.Sess<&2, List<&2, Reading.ChainEntry>>:
-  do MyLsmStore.Sess<&2, List<&2, Reading.ChainEntry>>:
+def empty_pair_list() -> Store.Op<&2, List<&2, Reading.ChainEntry>>:
+  do Store.Op<&2, List<&2, Reading.ChainEntry>>:
     return Nil{}
 
 # Empty Sess result of tree type.
-def empty_tree_maybe() -> MyLsmStore.Sess<&2, Maybe<&2, StateTree.StateTreeNode>>:
-  do MyLsmStore.Sess<&2, Maybe<&2, StateTree.StateTreeNode>>:
+def empty_tree_maybe() -> Store.Op<&2, Maybe<&2, StateTree.StateTreeNode>>:
+  do Store.Op<&2, Maybe<&2, StateTree.StateTreeNode>>:
     return None{}
 
 # Serializes, hashes and stores a commit.
-def persist_commit(+parent_commit_identifiers: List<&2, String>, +metadata: List<&2, CommitMeta>, +tree_hash_value: String) -> MyLsmStore.Sess<&2, Commit>:
-  do MyLsmStore.Sess<&2, Commit>:
+def persist_commit(+parent_commit_identifiers: List<&2, String>, +metadata: List<&2, CommitMeta>, +tree_hash_value: String) -> Store.Op<&2, Commit>:
+  do Store.Op<&2, Commit>:
     +commit_text : String = serialize_commit(parent_commit_identifiers, metadata, tree_hash_value)
     +commit_identifier : String = ContentHash.compute_sha256_hex(commit_text)
-    stored_unit : Unit <- MyLsmStore.sput(LogicalKey.build_commit_storage_key(commit_identifier), commit_text)
+    stored_unit : Unit <- Store.oput(LogicalKey.build_commit_storage_key(commit_identifier), commit_text)
     return Make{commit_identifier, parent_commit_identifiers, tree_hash_value, 0n, metadata, None{}}
 
 # Hashes and stores a merged entry list as a tree.
-def persist_tree(+merged_entries: List<&2, Reading.ChainEntry>) -> MyLsmStore.Sess<&2, String>:
-  do MyLsmStore.Sess<&2, String>:
+def persist_tree(+merged_entries: List<&2, Reading.ChainEntry>) -> Store.Op<&2, String>:
+  do Store.Op<&2, String>:
     +tree_hash_value : String = StateTree.compute_tree_hash(merged_entries)
-    stored_unit : Unit <- MyLsmStore.sput(LogicalKey.build_tree_storage_key(tree_hash_value), StateTree.serialize_tree(merged_entries, tree_hash_value))
+    stored_unit : Unit <- Store.oput(LogicalKey.build_tree_storage_key(tree_hash_value), StateTree.serialize_tree(merged_entries, tree_hash_value))
     return tree_hash_value
 
 # Writes one version-index entry per merged entry.
-def write_each_index(merged_entries: List<&2, Reading.ChainEntry>, +commit_value: Commit) -> MyLsmStore.Sess<&2, Unit>:
+def write_each_index(merged_entries: List<&2, Reading.ChainEntry>, +commit_value: Commit) -> Store.Op<&2, Unit>:
   match merged_entries:
     case Nil{}:
       empty_unit()
     case Con{+head_entry, remaining_entries}:
-      do MyLsmStore.Sess<&2, Unit>:
-        head_unit : Unit <- MyLsmStore.sput(LogicalKey.build_version_index_key(Reading.entry_key_of(head_entry), commit_identifier_of(commit_value)), Reading.entry_value_of(head_entry))
+      do Store.Op<&2, Unit>:
+        head_unit : Unit <- Store.oput(LogicalKey.build_version_index_key(Reading.entry_key_of(head_entry), commit_identifier_of(commit_value)), Reading.entry_value_of(head_entry))
         tail_unit : Unit <- write_each_index(remaining_entries, commit_value)
         return tail_unit
 
 # Removes staged keys consumed by the commit.
-def clear_stage_keys(+session_identifier: String, merged_entries: List<&2, Reading.ChainEntry>) -> MyLsmStore.Sess<&2, Unit>:
+def clear_stage_keys(+session_identifier: String, merged_entries: List<&2, Reading.ChainEntry>) -> Store.Op<&2, Unit>:
   match merged_entries:
     case Nil{}:
       empty_unit()
     case Con{head_entry, remaining_entries}:
-      do MyLsmStore.Sess<&2, Unit>:
-        cleared_unit : Unit <- MyLsmStore.sdel(LogicalKey.build_stage_storage_key_combined(session_identifier, Reading.entry_key_of(head_entry)))
+      do Store.Op<&2, Unit>:
+        cleared_unit : Unit <- Store.odel(LogicalKey.build_stage_storage_key_combined(session_identifier, Reading.entry_key_of(head_entry)))
         cleared_tail : Unit <- clear_stage_keys(session_identifier, remaining_entries)
         return cleared_tail
 
 # Writes the index and clears the stage in sequence.
-def persist_index_and_clear(+session_identifier: String, +merged_entries: List<&2, Reading.ChainEntry>, +commit_value: Commit) -> MyLsmStore.Sess<&2, Unit>:
-  do MyLsmStore.Sess<&2, Unit>:
+def persist_index_and_clear(+session_identifier: String, +merged_entries: List<&2, Reading.ChainEntry>, +commit_value: Commit) -> Store.Op<&2, Unit>:
+  do Store.Op<&2, Unit>:
     indexed_unit : Unit <- write_each_index(merged_entries, commit_value)
     cleared_unit : Unit <- clear_stage_keys(session_identifier, merged_entries)
-    index_cleared_unit : Unit <- MyLsmStore.sdel(Staging.stage_index_key(session_identifier))
+    index_cleared_unit : Unit <- Store.odel(Staging.stage_index_key(session_identifier))
     return index_cleared_unit
 
 # Persists tree, commit and index, then clears the stage.
-def materialize_commit(+session_identifier: String, +parent_commit_identifiers: List<&2, String>, metadata: List<&2, CommitMeta>, +merged_entries: List<&2, Reading.ChainEntry>) -> MyLsmStore.Sess<&2, Commit>:
-  do MyLsmStore.Sess<&2, Commit>:
+def materialize_commit(+session_identifier: String, +parent_commit_identifiers: List<&2, String>, metadata: List<&2, CommitMeta>, +merged_entries: List<&2, Reading.ChainEntry>) -> Store.Op<&2, Commit>:
+  do Store.Op<&2, Commit>:
     +tree_hash_value : String <- persist_tree(merged_entries)
     +commit_value : Commit <- persist_commit(parent_commit_identifiers, metadata, tree_hash_value)
     cleared_unit : Unit <- persist_index_and_clear(session_identifier, merged_entries, commit_value)
@@ -297,13 +298,13 @@ def parse_tree_text(tree_hash_value: String, tree_maybe: Maybe<&2, String>) -> M
       StateTree.parse_tree_document(tree_text)
 
 # Loads a tree by hash.
-def load_tree_text(+tree_hash_value: String) -> MyLsmStore.Sess<&2, Maybe<&2, StateTree.StateTreeNode>>:
-  do MyLsmStore.Sess<&2, Maybe<&2, StateTree.StateTreeNode>>:
-    tree_maybe : Maybe<&2, String> <- MyLsmStore.sget(LogicalKey.build_tree_storage_key(tree_hash_value))
+def load_tree_text(+tree_hash_value: String) -> Store.Op<&2, Maybe<&2, StateTree.StateTreeNode>>:
+  do Store.Op<&2, Maybe<&2, StateTree.StateTreeNode>>:
+    tree_maybe : Maybe<&2, String> <- Store.oget(LogicalKey.build_tree_storage_key(tree_hash_value))
     return parse_tree_text(tree_hash_value, tree_maybe)
 
 # Loads the tree a commit points at.
-def load_tree_by_commit(commit_maybe: Maybe<&2, Commit>) -> MyLsmStore.Sess<&2, Maybe<&2, StateTree.StateTreeNode>>:
+def load_tree_by_commit(commit_maybe: Maybe<&2, Commit>) -> Store.Op<&2, Maybe<&2, StateTree.StateTreeNode>>:
   match commit_maybe:
     case None{}:
       empty_tree_maybe()
@@ -311,8 +312,8 @@ def load_tree_by_commit(commit_maybe: Maybe<&2, Commit>) -> MyLsmStore.Sess<&2, 
       load_tree_text(commit_tree_of(found_commit))
 
 # Reads the tree for a commit identifier.
-def read_tree_at(+commit_identifier: String) -> MyLsmStore.Sess<&2, Maybe<&2, StateTree.StateTreeNode>>:
-  do MyLsmStore.Sess<&2, Maybe<&2, StateTree.StateTreeNode>>:
+def read_tree_at(+commit_identifier: String) -> Store.Op<&2, Maybe<&2, StateTree.StateTreeNode>>:
+  do Store.Op<&2, Maybe<&2, StateTree.StateTreeNode>>:
     commit_maybe : Maybe<&2, Commit> <- load_commit(commit_identifier)
     loaded_tree : Maybe<&2, StateTree.StateTreeNode> <- load_tree_by_commit(commit_maybe)
     return loaded_tree
@@ -326,13 +327,13 @@ def base_or_empty(tree_maybe: Maybe<&2, StateTree.StateTreeNode>) -> List<&2, Re
       StateTree.tree_entries(parent_tree)
 
 # Loads the first parent entries.
-def load_parent_tree(head_parent: String) -> MyLsmStore.Sess<&2, List<&2, Reading.ChainEntry>>:
-  do MyLsmStore.Sess<&2, List<&2, Reading.ChainEntry>>:
+def load_parent_tree(head_parent: String) -> Store.Op<&2, List<&2, Reading.ChainEntry>>:
+  do Store.Op<&2, List<&2, Reading.ChainEntry>>:
     tree_maybe : Maybe<&2, StateTree.StateTreeNode> <- read_tree_at(head_parent)
     return base_or_empty(tree_maybe)
 
 # Loads base entries; root commits start empty.
-def load_base_entries(parent_commit_identifiers: List<&2, String>) -> MyLsmStore.Sess<&2, List<&2, Reading.ChainEntry>>:
+def load_base_entries(parent_commit_identifiers: List<&2, String>) -> Store.Op<&2, List<&2, Reading.ChainEntry>>:
   match parent_commit_identifiers:
     case Nil{}:
       empty_pair_list()
@@ -348,14 +349,14 @@ def prepend_pair_maybe(+head_key: String, head_value_maybe: Maybe<&2, String>, t
       Con{Reading.make_entry(head_key, head_value), tail_pairs}
 
 # Loads one staged value and prepends it.
-def prepend_loaded_pair(+session_identifier: String, +head_key: String, tail_action: MyLsmStore.Sess<&2, List<&2, Reading.ChainEntry>>) -> MyLsmStore.Sess<&2, List<&2, Reading.ChainEntry>>:
-  do MyLsmStore.Sess<&2, List<&2, Reading.ChainEntry>>:
-    head_value_maybe : Maybe<&2, String> <- MyLsmStore.sget(LogicalKey.build_stage_storage_key_combined(session_identifier, head_key))
+def prepend_loaded_pair(+session_identifier: String, +head_key: String, tail_action: Store.Op<&2, List<&2, Reading.ChainEntry>>) -> Store.Op<&2, List<&2, Reading.ChainEntry>>:
+  do Store.Op<&2, List<&2, Reading.ChainEntry>>:
+    head_value_maybe : Maybe<&2, String> <- Store.oget(LogicalKey.build_stage_storage_key_combined(session_identifier, head_key))
     tail_pairs : List<&2, Reading.ChainEntry> <- tail_action
     return prepend_pair_maybe(head_key, head_value_maybe, tail_pairs)
 
 # Loads every staged key in the manifest.
-def load_each_pair(+session_identifier: String, staged_keys: List<&2, String>) -> MyLsmStore.Sess<&2, List<&2, Reading.ChainEntry>>:
+def load_each_pair(+session_identifier: String, staged_keys: List<&2, String>) -> Store.Op<&2, List<&2, Reading.ChainEntry>>:
   match staged_keys:
     case Nil{}:
       empty_pair_list()
@@ -363,15 +364,15 @@ def load_each_pair(+session_identifier: String, staged_keys: List<&2, String>) -
       prepend_loaded_pair(session_identifier, head_key, load_each_pair(session_identifier, remaining_keys))
 
 # Collects the session staged pairs.
-def collect_staged_pairs(+session_identifier: String) -> MyLsmStore.Sess<&2, List<&2, Reading.ChainEntry>>:
-  do MyLsmStore.Sess<&2, List<&2, Reading.ChainEntry>>:
+def collect_staged_pairs(+session_identifier: String) -> Store.Op<&2, List<&2, Reading.ChainEntry>>:
+  do Store.Op<&2, List<&2, Reading.ChainEntry>>:
     staged_keys : List<&2, String> <- Staging.load_stage_index(session_identifier)
     collected_pairs : List<&2, Reading.ChainEntry> <- load_each_pair(session_identifier, staged_keys)
     return collected_pairs
 
 # Materializes stage plus base into a new commit.
-def create_commit(+session_identifier: String, +parent_commit_identifiers: List<&2, String>, metadata: List<&2, CommitMeta>) -> MyLsmStore.Sess<&2, Commit>:
-  do MyLsmStore.Sess<&2, Commit>:
+def create_commit(+session_identifier: String, +parent_commit_identifiers: List<&2, String>, metadata: List<&2, CommitMeta>) -> Store.Op<&2, Commit>:
+  do Store.Op<&2, Commit>:
     staged_pairs : List<&2, Reading.ChainEntry> <- collect_staged_pairs(session_identifier)
     base_entries : List<&2, Reading.ChainEntry> <- load_base_entries(parent_commit_identifiers)
     finished_commit : Commit <- materialize_commit(session_identifier, parent_commit_identifiers, metadata, StateTree.merge_sorted_entries(staged_pairs, base_entries))
@@ -385,18 +386,23 @@ def commit_parents_of(commit_value: Commit) -> List<&2, String>:
       parent_commit_identifiers
 
 # Empty Sess result of string-list type.
-def empty_string_list() -> MyLsmStore.Sess<&2, List<&2, String>>:
-  do MyLsmStore.Sess<&2, List<&2, String>>:
+def empty_string_list() -> Store.Op<&2, List<&2, String>>:
+  do Store.Op<&2, List<&2, String>>:
     return Nil{}
 
 # Empty Sess result of entry type.
-def empty_entry_maybe() -> MyLsmStore.Sess<&2, Maybe<&2, Reading.ChainEntry>>:
-  do MyLsmStore.Sess<&2, Maybe<&2, Reading.ChainEntry>>:
+def empty_entry_maybe() -> Store.Op<&2, Maybe<&2, Reading.ChainEntry>>:
+  do Store.Op<&2, Maybe<&2, Reading.ChainEntry>>:
     return None{}
 
-# Empty Sess result of string type.
-def empty_string_maybe() -> MyLsmStore.Sess<&2, Maybe<&2, String>>:
-  do MyLsmStore.Sess<&2, Maybe<&2, String>>:
+# Empty Op result of value type.
+def empty_value_maybe() -> Store.Op<&2, Maybe<&2, Value.Value>>:
+  do Store.Op<&2, Maybe<&2, Value.Value>>:
+    return None{}
+
+# Empty Op result of text type (commit identifiers, not values).
+def empty_text_maybe() -> Store.Op<&2, Maybe<&2, String>>:
+  do Store.Op<&2, Maybe<&2, String>>:
     return None{}
 
 # Heads the parent list; root commits yield empty.
@@ -416,12 +422,12 @@ def first_parent_text(commit_maybe: Maybe<&2, Commit>) -> String:
       first_parent_name(commit_parents_of(found_commit))
 
 # Walks first-parents with fuel; newest first.
-def walk_commit_chain(remaining_fuel: Nat, +commit_identifier: String) -> MyLsmStore.Sess<&2, List<&2, String>>:
+def walk_commit_chain(remaining_fuel: Nat, +commit_identifier: String) -> Store.Op<&2, List<&2, String>>:
   match remaining_fuel:
     case 0n:
       empty_string_list()
     case 1n+fuel_left:
-      do MyLsmStore.Sess<&2, List<&2, String>>:
+      do Store.Op<&2, List<&2, String>>:
         commit_maybe : Maybe<&2, Commit> <- load_commit(commit_identifier)
         tail_chain : List<&2, String> <- walk_commit_chain(fuel_left, first_parent_text(commit_maybe))
         return Con{commit_identifier, tail_chain}
@@ -435,19 +441,19 @@ def decide_search_hit(stored_maybe: Maybe<&2, String>, +lookup_key: String, tail
       Some{Reading.make_entry(lookup_key, stored_value)}
 
 # Searches the ancestor chain newest-first.
-def search_chain_entries(ancestor_chain: List<&2, String>, +namespace_name: String, +record_identifier: String) -> MyLsmStore.Sess<&2, Maybe<&2, Reading.ChainEntry>>:
+def search_chain_entries(ancestor_chain: List<&2, String>, +namespace_name: String, +record_identifier: String) -> Store.Op<&2, Maybe<&2, Reading.ChainEntry>>:
   match ancestor_chain:
     case Nil{}:
       empty_entry_maybe()
     case Con{head_commit, remaining_commits}:
-      do MyLsmStore.Sess<&2, Maybe<&2, Reading.ChainEntry>>:
+      do Store.Op<&2, Maybe<&2, Reading.ChainEntry>>:
         +lookup_key : String = Reading.encode_lookup_key(namespace_name, record_identifier)
-        stored_maybe : Maybe<&2, String> <- MyLsmStore.sget(LogicalKey.build_version_index_key(lookup_key, head_commit))
+        stored_maybe : Maybe<&2, String> <- Store.oget(LogicalKey.build_version_index_key(lookup_key, head_commit))
         tail_result : Maybe<&2, Reading.ChainEntry> <- search_chain_entries(remaining_commits, namespace_name, record_identifier)
         return decide_search_hit(stored_maybe, lookup_key, tail_result)
 
 # Projects the payload out of a loaded object.
-def payload_or_empty(loaded_maybe: Maybe<&2, ContentObject.ContentObject>) -> Maybe<&2, String>:
+def payload_or_empty(loaded_maybe: Maybe<&2, ContentObject.ContentObject>) -> Maybe<&2, Value.Value>:
   match loaded_maybe:
     case None{}:
       None{}
@@ -455,35 +461,35 @@ def payload_or_empty(loaded_maybe: Maybe<&2, ContentObject.ContentObject>) -> Ma
       Some{ContentObject.object_payload_of(loaded_object)}
 
 # Loads an object payload by content hash.
-def load_object_payload(+value_hash: String) -> MyLsmStore.Sess<&2, Maybe<&2, String>>:
-  do MyLsmStore.Sess<&2, Maybe<&2, String>>:
+def load_object_payload(+value_hash: String) -> Store.Op<&2, Maybe<&2, Value.Value>>:
+  do Store.Op<&2, Maybe<&2, Value.Value>>:
     loaded_maybe : Maybe<&2, ContentObject.ContentObject> <- ContentObject.load_content_object(value_hash)
     return payload_or_empty(loaded_maybe)
 
 # Tombstones read as absent; hashes load payloads.
-def decide_resolve_value(is_tombstone: Bool, +stored_value: String) -> MyLsmStore.Sess<&2, Maybe<&2, String>>:
+def decide_resolve_value(is_tombstone: Bool, +stored_value: String) -> Store.Op<&2, Maybe<&2, Value.Value>>:
   match is_tombstone:
     case True{}:
-      empty_string_maybe()
+      empty_value_maybe()
     case False{}:
       load_object_payload(stored_value)
 
 # Resolves one stored index value.
-def resolve_entry_value(+stored_value: String) -> MyLsmStore.Sess<&2, Maybe<&2, String>>:
+def resolve_entry_value(+stored_value: String) -> Store.Op<&2, Maybe<&2, Value.Value>>:
   decide_resolve_value(String.eq(stored_value, "TOMBSTONE"), stored_value)
 
 # Resolves a found chain entry to its payload.
-def resolve_found_entry(found_maybe: Maybe<&2, Reading.ChainEntry>) -> MyLsmStore.Sess<&2, Maybe<&2, String>>:
+def resolve_found_entry(found_maybe: Maybe<&2, Reading.ChainEntry>) -> Store.Op<&2, Maybe<&2, Value.Value>>:
   match found_maybe:
     case None{}:
-      empty_string_maybe()
+      empty_value_maybe()
     case Some{found_entry}:
       resolve_entry_value(Reading.entry_value_of(found_entry))
 
 # Reads a namespaced value at a commit.
-def read_value_at(+namespace_name: String, +record_identifier: String, +commit_identifier: String) -> MyLsmStore.Sess<&2, Maybe<&2, String>>:
-  do MyLsmStore.Sess<&2, Maybe<&2, String>>:
+def read_value_at(+namespace_name: String, +record_identifier: String, +commit_identifier: String) -> Store.Op<&2, Maybe<&2, Value.Value>>:
+  do Store.Op<&2, Maybe<&2, Value.Value>>:
     ancestor_chain : List<&2, String> <- walk_commit_chain(10000n, commit_identifier)
     found_entry : Maybe<&2, Reading.ChainEntry> <- search_chain_entries(ancestor_chain, namespace_name, record_identifier)
-    resolved_value : Maybe<&2, String> <- resolve_found_entry(found_entry)
+    resolved_value : Maybe<&2, Value.Value> <- resolve_found_entry(found_entry)
     return resolved_value

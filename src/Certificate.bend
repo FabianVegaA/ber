@@ -3,7 +3,7 @@ import ./Reading.bend as Reading
 import ./StateTree.bend as StateTree
 import ./History.bend as History
 import ./Merging.bend as Merging
-import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
+import ./Store.bend as Store
 
 # Independent merge verification. The pure core re-derives everything from
 # entry lists: strategy known, result hash matches recomputed hash, merge
@@ -141,8 +141,8 @@ def decide_verify_trees(+certificate: Merging.MergeCertificate, base_maybe: Mayb
       decide_verify_first(certificate, base_tree, first_maybe, second_maybe, result_maybe)
 
 # Shell: loads the four trees named by the certificate and runs the core.
-def verify_certificate(+certificate: Merging.MergeCertificate) -> MyLsmStore.Sess<&2, Bool>:
-  do MyLsmStore.Sess<&2, Bool>:
+def verify_certificate(+certificate: Merging.MergeCertificate) -> Store.Op<&2, Bool>:
+  do Store.Op<&2, Bool>:
     base_tree_maybe : Maybe<&2, StateTree.StateTreeNode> <- History.read_tree_at(Merging.cert_base_commit(certificate))
     first_tree_maybe : Maybe<&2, StateTree.StateTreeNode> <- History.read_tree_at(Merging.cert_first_parent(certificate))
     second_tree_maybe : Maybe<&2, StateTree.StateTreeNode> <- History.read_tree_at(Merging.cert_second_parent(certificate))

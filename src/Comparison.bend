@@ -3,7 +3,7 @@ import ./Reading.bend as Reading
 import ./LogicalKey.bend as LogicalKey
 import ./StateTree.bend as StateTree
 import ./History.bend as History
-import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
+import ./Store.bend as Store
 
 # Structural tree diff, membership-based (no ordering decisions): added =
 # second-only keys, removed = first-only keys, modified = shared keys with
@@ -272,8 +272,8 @@ def compare_loaded_trees(+first_maybe: Maybe<&2, StateTree.StateTreeNode>, +seco
   dispatch_tree_hashes(String.eq(hash_or_empty(first_maybe), hash_or_empty(second_maybe)), first_maybe, second_maybe)
 
 # Shell: loads both trees and diffs them.
-def compare_commits(+first_identifier: String, +second_identifier: String) -> MyLsmStore.Sess<&2, CompareResult>:
-  do MyLsmStore.Sess<&2, CompareResult>:
+def compare_commits(+first_identifier: String, +second_identifier: String) -> Store.Op<&2, CompareResult>:
+  do Store.Op<&2, CompareResult>:
     first_tree_maybe : Maybe<&2, StateTree.StateTreeNode> <- History.read_tree_at(first_identifier)
     second_tree_maybe : Maybe<&2, StateTree.StateTreeNode> <- History.read_tree_at(second_identifier)
     return compare_loaded_trees(first_tree_maybe, second_tree_maybe)
