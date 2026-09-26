@@ -1,15 +1,13 @@
 import Base
-import ../src/Staging.bend as Staging
-import ../src/History.bend as History
-import ../src/StateTree.bend as StateTree
+import ../ber.bend as Ber
+import ../src/Store.bend as Store
+import ../src/Value.bend as Value
 import ../src/Reading.bend as Reading
+import ../src/StateTree.bend as StateTree
 import ../src/LogicalKey.bend as LogicalKey
-import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
-import mylsm-lsm-store@0.3.1.0/src/Db.bend as DbTypes
 
 # IO harness: linear commit materializes stage into tree/commit/index and
 # the tree reads back with the expected entries.
-
 
 def flag_text(check_name: String, condition: Bool) -> String:
   match condition:
@@ -112,16 +110,13 @@ def immutable_flag(first_maybe: Maybe<&2, StateTree.StateTreeNode>, again_maybe:
     case Some{first_tree}:
       immutable_second(StateTree.tree_hash_of(first_tree), again_maybe)
 
-def scenario_texts() -> MyLsmStore.Sess<&2, List<&2, String>>:
-  do MyLsmStore.Sess<&2, List<&2, String>>:
-    staged_first : LogicalKey.LogicalKey <- Staging.put_record("session_first", "ledger", "record_first", "first_version")
-    first_commit : History.Commit <- History.create_commit("session_first", Nil{}, Con{History.Field{"message", "initial"}, Nil{}})
-    +first_identifier : String = History.commit_identifier_of(first_commit)
-    +first_tree_maybe : Maybe<&2, StateTree.StateTreeNode> <- History.read_tree_at(first_identifier)
-    staged_second : LogicalKey.LogicalKey <- Staging.put_record("session_first", "ledger", "record_first", "second_version")
-    second_commit : History.Commit <- History.create_commit("session_first", Con{first_identifier, Nil{}}, Con{History.Field{"message", "second"}, Nil{}})
-    +second_tree_maybe : Maybe<&2, StateTree.StateTreeNode> <- History.read_tree_at(History.commit_identifier_of(second_commit))
-    again_tree_maybe : Maybe<&2, StateTree.StateTreeNode> <- History.read_tree_at(first_identifier)
+def scenario_texts() -> Store.Op<&2, List<&2, String>>:
+  do Store.Op<&2, List<&2, String>>:
+    +first_identifier : String <- Ber.commit_value("session_first", "ledger", "record_first", Value.Text{"first_version"}, Nil{})
+    +first_tree_maybe : Maybe<&2, StateTree.StateTreeNode> <- Ber.read_tree_at(first_identifier)
+    +second_identifier : String <- Ber.commit_value("session_first", "ledger", "record_first", Value.Text{"second_version"}, Con{first_identifier, Nil{}})
+    +second_tree_maybe : Maybe<&2, StateTree.StateTreeNode> <- Ber.read_tree_at(second_identifier)
+    again_tree_maybe : Maybe<&2, StateTree.StateTreeNode> <- Ber.read_tree_at(first_identifier)
     return Con{count_flag("first-count-one", first_tree_maybe), Con{key_flag(first_tree_maybe), Con{count_flag("second-count-one", second_tree_maybe), Con{values_differ_flag(first_tree_maybe, second_tree_maybe), Con{immutable_flag(first_tree_maybe, again_tree_maybe), Nil{}}}}}}
 
 def join_lines(text_lines: List<&2, String>) -> String:
@@ -131,11 +126,11 @@ def join_lines(text_lines: List<&2, String>) -> String:
     case Con{head_text, remaining_texts}:
       head_text ++ "\n" ++ join_lines(remaining_texts)
 
-def print_scenario_result(result_pair: DbTypes.Db & List<&2, String>) -> IO(Unit):
+def print_scenario_result(result_pair: Store.Handle & List<&2, String>) -> IO(Unit):
   match result_pair:
     case (unused_store, text_lines):
       IO.print(join_lines(text_lines))
 
 def main() -> IO(Unit):
-  opened_store = MyLsmStore.open("commit-check")
-  print_scenario_result(MyLsmStore.run_sess(&2, List<&2, String>, opened_store, scenario_texts()))
+  opened_store : Store.Handle = Store.open_store("commit-check")
+  print_scenario_result(Store.run_op(&2, List<&2, String>, opened_store, scenario_texts()))
