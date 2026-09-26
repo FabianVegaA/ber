@@ -11,12 +11,15 @@ import bend-kit-json@0.3.0.0/json.bend as Json
 # Kit is named for the Val TYPE only; operations go through JsonAdapter.
 # Effects are MyLSM Sess actions composed in do-blocks.
 
+# Addresses the per-session staged-key manifest.
 def stage_index_key(+session_identifier: String) -> String:
   "stage-index/" ++ session_identifier
 
+# Encodes the manifest as a canonical JSON string list.
 def serialize_key_list(staged_keys: List<&2, String>) -> String:
   JsonAdapter.encode_canonical(JsonAdapter.make_arr(ContentObject.encode_each_reference(staged_keys)))
 
+# Treats a failed decode as an empty manifest.
 def index_from_strings(strings_maybe: Maybe<&2, List<&2, String>>) -> List<&2, String>:
   match strings_maybe:
     case None{}:
@@ -24,6 +27,7 @@ def index_from_strings(strings_maybe: Maybe<&2, List<&2, String>>) -> List<&2, S
     case Some{key_texts}:
       key_texts
 
+# Unwraps the manifest array, then decodes.
 def index_from_document(items_maybe: Maybe<&2, List<&2, Json.Val>>) -> List<&2, String>:
   match items_maybe:
     case None{}:
@@ -31,6 +35,7 @@ def index_from_document(items_maybe: Maybe<&2, List<&2, Json.Val>>) -> List<&2, 
     case Some{json_items}:
       index_from_strings(ContentObject.extract_each_string(json_items))
 
+# Parses stored manifest text; malformed reads as empty.
 def index_from_text(parse_result: Maybe<&2, Json.Val>) -> List<&2, String>:
   match parse_result:
     case None{}:
@@ -38,6 +43,7 @@ def index_from_text(parse_result: Maybe<&2, Json.Val>) -> List<&2, String>:
     case Some{document}:
       index_from_document(JsonAdapter.as_arr(document))
 
+# Loads the manifest; missing storage reads as empty.
 def parse_stage_index(stored_maybe: Maybe<&2, String>) -> List<&2, String>:
   match stored_maybe:
     case None{}:
@@ -45,6 +51,7 @@ def parse_stage_index(stored_maybe: Maybe<&2, String>) -> List<&2, String>:
     case Some{stored_text}:
       index_from_text(JsonAdapter.parse_text(stored_text))
 
+# True short-circuits the membership scan.
 def decide_contains(head_matches: Bool, recursive_result: Bool) -> Bool:
   match head_matches:
     case True{}:
@@ -52,6 +59,7 @@ def decide_contains(head_matches: Bool, recursive_result: Bool) -> Bool:
     case False{}:
       recursive_result
 
+# Scans the manifest for the target key.
 def contains_staged_key(+target_key: String, staged_keys: List<&2, String>) -> Bool:
   match staged_keys:
     case Nil{}:
@@ -59,6 +67,7 @@ def contains_staged_key(+target_key: String, staged_keys: List<&2, String>) -> B
     case Con{head_key, remaining_keys}:
       decide_contains(String.eq(head_key, target_key), contains_staged_key(target_key, remaining_keys))
 
+# Prepends unless already present.
 def prepend_unless_present(already_present: Bool, target_key: String, staged_keys: List<&2, String>) -> List<&2, String>:
   match already_present:
     case True{}:
@@ -66,14 +75,17 @@ def prepend_unless_present(already_present: Bool, target_key: String, staged_key
     case False{}:
       Con{target_key, staged_keys}
 
+# Adds the key unless the manifest has it.
 def add_key_unless_present(+target_key: String, +staged_keys: List<&2, String>) -> List<&2, String>:
   prepend_unless_present(contains_staged_key(target_key, staged_keys), target_key, staged_keys)
 
+# Loads the session manifest.
 def load_stage_index(+session_identifier: String) -> MyLsmStore.Sess<&2, List<&2, String>>:
   do MyLsmStore.Sess<&2, List<&2, String>>:
     stored_maybe : Maybe<&2, String> <- MyLsmStore.sget(stage_index_key(session_identifier))
     return parse_stage_index(stored_maybe)
 
+# Stores one staged value and records its key.
 def record_stage_entry(+session_identifier: String, +namespace_name: String, +record_identifier: String, value_hash: String) -> MyLsmStore.Sess<&2, LogicalKey.LogicalKey>:
   do MyLsmStore.Sess<&2, LogicalKey.LogicalKey>:
     +full_key_text : String = LogicalKey.encode_logical_key(LogicalKey.Make{namespace_name, record_identifier})
@@ -82,12 +94,14 @@ def record_stage_entry(+session_identifier: String, +namespace_name: String, +re
     saved_unit : Unit <- MyLsmStore.sput(stage_index_key(session_identifier), serialize_key_list(add_key_unless_present(full_key_text, current_index)))
     return LogicalKey.Make{namespace_name, record_identifier}
 
+# Stages a value for later commit.
 def put_record(+session_identifier: String, +namespace_name: String, +record_identifier: String, value: String) -> MyLsmStore.Sess<&2, LogicalKey.LogicalKey>:
   do MyLsmStore.Sess<&2, LogicalKey.LogicalKey>:
     +value_hash : String <- ContentObject.store_content_object(value, Nil{})
     staged_key : LogicalKey.LogicalKey <- record_stage_entry(session_identifier, namespace_name, record_identifier, value_hash)
     return staged_key
 
+# Stages a tombstone for later commit.
 def delete_record(+session_identifier: String, +namespace_name: String, +record_identifier: String) -> MyLsmStore.Sess<&2, LogicalKey.LogicalKey>:
   do MyLsmStore.Sess<&2, LogicalKey.LogicalKey>:
     staged_key : LogicalKey.LogicalKey <- record_stage_entry(session_identifier, namespace_name, record_identifier, "TOMBSTONE")

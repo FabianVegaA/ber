@@ -7,6 +7,10 @@ import ../src/LogicalKey.bend as LogicalKey
 import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
 import mylsm-lsm-store@0.3.1.0/src/Db.bend as DbTypes
 
+# IO harness: linear commit materializes stage into tree/commit/index and
+# the tree reads back with the expected entries.
+
+
 def flag_text(check_name: String, condition: Bool) -> String:
   match condition:
     case True{}:

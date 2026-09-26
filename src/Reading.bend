@@ -1,20 +1,16 @@
 import Base
 
-# Pure chain-reading cores. Laws in LAWS.bend quantify over THESE functions,
-# never over IO/Sess actions. The Sess shells (Task 4+) only build the
-# ancestor_chain (by walking parent_commit_identifiers) and call lookup_in_chain.
-#
-# ORDER MATTERS: a def may only call defs declared ABOVE it (no forward
-# references, no mutual recursion). Helpers come first, entry points last.
-
-# NOTE: entries are NOT String & String pairs — a & pair defaults to kind Type,
-# which List<&2, _> rejects. A named Data constructor carries the kind.
+# Pure chain-reading cores; LAWS.bend quantifies over these, never over IO.
+# Entries are a named Data constructor because a & pair defaults to kind
+# Type, which List<&2, _> rejects.
 type ChainEntry is Data:
   Entry{entry_key: String, entry_value: String}
 
+# Builds the "namespace/record" lookup key.
 def encode_lookup_key(+namespace_name: String, +record_identifier: String) -> String:
   namespace_name ++ "/" ++ record_identifier
 
+# Some on match, otherwise the recursive fallback.
 def pick_match(key_matches: Bool, stored_value: String, fallback: Maybe<&2, String>) -> Maybe<&2, String>:
   match key_matches:
     case True{}:
@@ -32,6 +28,7 @@ def lookup_in_chain(+namespace_name: String, +record_identifier: String, ancesto
         case Entry{entry_key, entry_value}:
           pick_match(String.eq(entry_key, encode_lookup_key(namespace_name, record_identifier)), entry_value, lookup_in_chain(namespace_name, record_identifier, remaining_chain))
 
+# A tombstone reads as absent; any other value survives.
 def drop_tombstone(is_tombstone: Bool, stored_value: String) -> Maybe<&2, String>:
   match is_tombstone:
     case True{}:
@@ -39,6 +36,7 @@ def drop_tombstone(is_tombstone: Bool, stored_value: String) -> Maybe<&2, String
     case False{}:
       Some{stored_value}
 
+# Maps the TOMBSTONE sentinel to None.
 def resolve_tombstone(maybe_value: Maybe<&2, String>) -> Maybe<&2, String>:
   match maybe_value:
     case None{}:
@@ -46,6 +44,7 @@ def resolve_tombstone(maybe_value: Maybe<&2, String>) -> Maybe<&2, String>:
     case Some{+stored_value}:
       drop_tombstone(String.eq(stored_value, "TOMBSTONE"), stored_value)
 
+# Drops the entry on match, keeps it otherwise.
 def drop_or_keep(is_match: Bool, stored_key: String, stored_value: String, filtered_tail: List<&2, ChainEntry>) -> List<&2, ChainEntry>:
   match is_match:
     case True{}:
@@ -53,11 +52,13 @@ def drop_or_keep(is_match: Bool, stored_key: String, stored_value: String, filte
     case False{}:
       Con{Entry{stored_key, stored_value}, filtered_tail}
 
+# Removes the head entry when its key equals the target.
 def filter_entry(head_entry: ChainEntry, filtered_tail: List<&2, ChainEntry>, target_key: String) -> List<&2, ChainEntry>:
   match head_entry:
     case Entry{+entry_key, +entry_value}:
       drop_or_keep(String.eq(entry_key, target_key), entry_key, entry_value, filtered_tail)
 
+# Removes every entry whose key equals the target.
 def remove_key_matches(+target_key: String, ancestor_chain: List<&2, ChainEntry>) -> List<&2, ChainEntry>:
   match ancestor_chain:
     case Nil{}:
@@ -65,13 +66,13 @@ def remove_key_matches(+target_key: String, ancestor_chain: List<&2, ChainEntry>
     case Con{head_entry, remaining_chain}:
       filter_entry(head_entry, remove_key_matches(target_key, remaining_chain), target_key)
 
+# Keeps the head and drops its older duplicates from the normalized tail.
 def attach_head(head_entry: ChainEntry, normalized_tail: List<&2, ChainEntry>) -> List<&2, ChainEntry>:
   match head_entry:
     case Entry{+entry_key, +entry_value}:
       Con{Entry{entry_key, entry_value}, remove_key_matches(entry_key, normalized_tail)}
 
-# Drops older duplicates: keeps the FIRST (newest) occurrence of each key.
-# Law read_determinism: shadowed entries never affect a read.
+# Drops older duplicates, keeping the first (newest) occurrence of each key.
 def normalize_chain(ancestor_chain: List<&2, ChainEntry>) -> List<&2, ChainEntry>:
   match ancestor_chain:
     case Nil{}:
@@ -79,16 +80,17 @@ def normalize_chain(ancestor_chain: List<&2, ChainEntry>) -> List<&2, ChainEntry
     case Con{head_entry, remaining_chain}:
       attach_head(head_entry, normalize_chain(remaining_chain))
 
-# Shared vocabulary: other modules build/inspect ChainEntry through THESE
-# (foreign-module constructor patterns are avoided on purpose).
+# Shared vocabulary: other modules build ChainEntry through this constructor.
 def make_entry(entry_key: String, entry_value: String) -> ChainEntry:
   Entry{entry_key, entry_value}
 
+# Projects the key out of an entry.
 def entry_key_of(chain_entry: ChainEntry) -> String:
   match chain_entry:
     case Entry{entry_key, entry_value}:
       entry_key
 
+# Projects the value out of an entry.
 def entry_value_of(chain_entry: ChainEntry) -> String:
   match chain_entry:
     case Entry{entry_key, entry_value}:

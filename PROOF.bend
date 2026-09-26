@@ -2,7 +2,8 @@ import Base
 import ./LAWS.bend as Laws
 import ./src/EqTheory.bend as EqTheory
 
-# Proofs for LAWS.bend. Each law gets a def of the same name.
+# Proofs for LAWS.bend: one def per law, same name. {==} closes every
+# computational law; the two reflexivity laws delegate to EqTheory.
 def Laws.empty_chain_reads_none(namespace_name, record_identifier):
   {==}
 

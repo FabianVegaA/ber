@@ -3,6 +3,9 @@ import ../src/ContentObject.bend as ContentObject
 import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
 import mylsm-lsm-store@0.3.1.0/src/Db.bend as DbTypes
 
+# IO harness: content objects roundtrip by hash; identical payloads dedupe.
+
+
 def check_payload_text(loaded_object: ContentObject.ContentObject, expected_payload: String) -> Bool:
   match loaded_object:
     case ContentObject.Make{found_hash, found_payload, found_references}:
@@ -22,7 +25,6 @@ def flag_text(check_name: String, condition: Bool) -> String:
     case False{}:
       check_name ++ ": FAIL"
 
-# One Sess program: all store/load steps sequenced in the monad, db stays inside.
 def scenario_texts() -> MyLsmStore.Sess<&2, List<&2, String>>:
   do MyLsmStore.Sess<&2, List<&2, String>>:
     +first_hash : String <- ContentObject.store_content_object("hello", Nil{})

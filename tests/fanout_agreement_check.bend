@@ -3,9 +3,9 @@ import ../src/Reading.bend as Reading
 import ../src/Comparison.bend as Comparison
 import ../src/LogicalKey.bend as LogicalKey
 
-# Agreement: fanned vs sequential paths agree on COUNTS (order may differ —
-# evens-then-odds vs scan order — by design, see Comparison.bend header).
-# 40 shared keys (every 5th value changed → 8 modified) + 5 second-only keys.
+# IO harness: fanned and sequential compare agree on counts on small inputs.
+
+
 
 def flag_text(check_name: String, condition: Bool) -> String:
   match condition:

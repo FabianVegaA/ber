@@ -2,6 +2,9 @@ import Base
 import ../src/JsonAdapter.bend as JsonAdapter
 import bend-kit-json@0.3.0.0/json.bend as Json
 
+# IO harness: adapter encode/parse/get roundtrips and canonical bytes.
+
+
 def sample_ref_list() -> List<&2, Json.Val>:
   Con{JsonAdapter.make_str("ref_a"), Nil{}}
 

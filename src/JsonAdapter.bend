@@ -11,20 +11,25 @@ import bend-kit-json@0.3.0.0/json.bend as Json
 # differential check vs Python json, not by proof. If kit ships a safe
 # encoder, only this file changes.
 
+# Wraps text as a JSON string value.
 def make_str(+text: String) -> Json.Val:
   Json.Str{text}
 
+# Wraps a value list as a JSON array.
 def make_arr(items: List<&2, Json.Val>) -> Json.Val:
   Json.Arr{items}
 
+# Builds one object field pair.
 def make_kv(+field_key: String, field_value: Json.Val) -> Sigma<&2, &2, String, _ => Json.Val>:
   (field_key, field_value)
 
+# Inserts one field pair into the map.
 def fold_pair(field_map: Map<&2, Json.Val>, field_pair: Sigma<&2, &2, String, _ => Json.Val>) -> Map<&2, Json.Val>:
   match field_pair:
     case (field_key, field_value):
       Map.set(&2, Json.Val, field_map, field_key, field_value)
 
+# Folds a field list into a map; the list shrinks first.
 def fold_fields(remaining_fields: List<&2, Sigma<&2, &2, String, _ => Json.Val>>, field_map: Map<&2, Json.Val>) -> Map<&2, Json.Val>:
   match remaining_fields:
     case Nil{}:
@@ -32,15 +37,19 @@ def fold_fields(remaining_fields: List<&2, Sigma<&2, &2, String, _ => Json.Val>>
     case Con{field_pair, tail_fields}:
       fold_fields(tail_fields, fold_pair(field_map, field_pair))
 
+# Builds an object; keys come out sorted by construction.
 def make_obj(fields: List<&2, Sigma<&2, &2, String, _ => Json.Val>>) -> Json.Val:
   Json.Obj{fold_fields(fields, Map.new(&2, Json.Val))}
 
+# Parses stored text; None on malformed input.
 def parse_text(+stored_text: String) -> Maybe<&2, Json.Val>:
   Json.parse(stored_text)
 
+# Looks up an object field; None when absent or not an object.
 def get_field(+document: Json.Val, +field_name: String) -> Maybe<&2, Json.Val>:
   Json.get(document, field_name)
 
+# Unwraps a string value; None otherwise.
 def as_str(json_value: Json.Val) -> Maybe<&2, String>:
   match json_value:
     case Json.Str{text}:
@@ -48,6 +57,7 @@ def as_str(json_value: Json.Val) -> Maybe<&2, String>:
     case _:
       None{}
 
+# Unwraps an array value; None otherwise.
 def as_arr(json_value: Json.Val) -> Maybe<&2, List<&2, Json.Val>>:
   match json_value:
     case Json.Arr{items}:
@@ -55,5 +65,6 @@ def as_arr(json_value: Json.Val) -> Maybe<&2, List<&2, Json.Val>>:
     case _:
       None{}
 
+# Encodes with keys sorted; the canonical bytes.
 def encode_canonical(+document: Json.Val) -> String:
   Json.encode(document)

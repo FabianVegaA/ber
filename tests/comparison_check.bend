@@ -6,6 +6,10 @@ import ../src/LogicalKey.bend as LogicalKey
 import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
 import mylsm-lsm-store@0.3.1.0/src/Db.bend as DbTypes
 
+# IO harness: disjoint and identical compares, pruning shortcut, missing
+# trees tolerated as empty.
+
+
 def flag_text(check_name: String, condition: Bool) -> String:
   match condition:
     case True{}:

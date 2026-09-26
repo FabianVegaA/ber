@@ -7,6 +7,9 @@ import ../src/LogicalKey.bend as LogicalKey
 import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
 import mylsm-lsm-store@0.3.1.0/src/Db.bend as DbTypes
 
+# IO harness: faithful certificates verify, tampered/empty/unknown ones fail.
+
+
 def flag_text(check_name: String, condition: Bool) -> String:
   match condition:
     case True{}:

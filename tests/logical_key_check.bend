@@ -2,6 +2,9 @@ import Base
 import ../src/LogicalKey.bend as LogicalKey
 import ../src/ContentHash.bend as ContentHash
 
+# IO harness: pure key encoding and every storage-key builder.
+
+
 def report(check_name: String, condition: Bool) -> IO(Unit):
   match condition:
     case True{}:

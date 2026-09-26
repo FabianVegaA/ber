@@ -5,6 +5,10 @@ import ../src/LogicalKey.bend as LogicalKey
 import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
 import mylsm-lsm-store@0.3.1.0/src/Db.bend as DbTypes
 
+# IO harness: versioned reads across put/commit/delete cycles on a real
+# MyLSM store; laws cover the pure cores, this covers the wiring.
+
+
 def flag_text(check_name: String, condition: Bool) -> String:
   match condition:
     case True{}:
