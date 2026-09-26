@@ -1100,7 +1100,7 @@ import ./src/Staging.bend as Staging
 import ./src/History.bend as History
 import ./src/LogicalKey.bend as LogicalKey
 import ./src/Merging.bend as Merging
-import 0x0ae7ac793853e753f5f74c16e06ee078/mylsm.bend as MyLsmStore
+import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
 
 def scenario() -> MyLsmStore.Sess<&2, String>:
   do MyLsmStore.Sess<&2, String>:
@@ -1177,7 +1177,36 @@ git commit -m "docs(ber-core): adopt kit-json in spec, add README"
 
 ---
 
-### Task 11: Final gate
+### Task 11: Version-style MyLSM imports
+
+**Files:**
+- Modify: `src/Certificate.bend`, `src/Comparison.bend`, `src/ContentHash.bend`, `src/ContentObject.bend`, `src/History.bend`, `src/Merging.bend`, `src/Staging.bend`
+- Modify: `tests/certificate_check.bend`, `tests/commit_read_check.bend`, `tests/comparison_check.bend`, `tests/content_object_check.bend`, `tests/merging_check.bend`, `tests/reading_check.bend`
+
+`mylsm-lsm-store@0.3.1.0` is hub-published and resolves to the identical pinned hash (verified 2026-09-26: `~/.bend/lib/names/` mapping + import-check green), so version style is equally pinned and reads cleaner. (`src/MyLsmBinding.bend` is already gone by Task 8 — not in this list.)
+
+- [ ] **Step 1: Apply the substitution (one token, 19 sites, 13 files)**
+
+```bash
+sed -i '' 's|0x0ae7ac793853e753f5f74c16e06ee078|mylsm-lsm-store@0.3.1.0|g' src/Certificate.bend src/Comparison.bend src/ContentHash.bend src/ContentObject.bend src/History.bend src/Merging.bend src/Staging.bend tests/certificate_check.bend tests/commit_read_check.bend tests/comparison_check.bend tests/content_object_check.bend tests/merging_check.bend tests/reading_check.bend
+```
+
+This covers all three shapes at once: `/mylsm.bend` (12 sites), `/src/Db.bend` (6 sites, tests), `/src/hub_sha/sha256.bend` (1 site, ContentHash).
+
+- [ ] **Step 2: Verify, gate, commit**
+
+Run: `rg -n "0x0ae7" src tests benches LAWS.bend PROOF.bend` → no output.
+Run: `bend PROOF.bend` → `All terms check.`
+Run: `bend tests/reading_check.bend` → all PASS (exercises the renamed `Db.bend` import path).
+
+```bash
+git add src tests
+git commit -m "refactor(ber-core): version-style mylsm imports, same pinned hash"
+```
+
+---
+
+### Task 12: Final gate
 
 - [ ] **Step 1: Full sweep in one pass**
 
@@ -1192,7 +1221,7 @@ Expected: `All terms check.`; every check prints only PASS/True lines; bolt `0 e
 - [ ] **Step 2: Diff review**
 
 Run: `git log --oneline main..HEAD` and `git diff main --stat`
-Expected: 11 commits (Tasks 0-10, one each); `vendor/` gone.
+Expected: 12 commits (Tasks 0-11, one each); `vendor/` gone.
 Law-claim integrity: `git diff main -- LAWS.bend PROOF.bend | grep -E "^[-+]" | grep -vE "^[-+]{2}" | grep -v "#"` must print NOTHING — every changed line is a `#` comment; no law or proof body changed.
 
 - [ ] **Step 3: Report**
@@ -1203,7 +1232,7 @@ Summarize: migration evidence (probe PASS), dead code removed, bolt state, remai
 
 ## Self-review
 
-- **Spec coverage:** §1 laws-vs-tests → no test deletion (tests are IO wiring; verified no pure-duplicate asserts worth removing — Task 7 sweep keeps all 9 checks). §2 adapter+kit → Tasks 1-7 (probe load-bearing first, per spec). §3 comments → Tasks 3-6 Step 3 + Task 9. §4 bend-cli → absent by design. §5 binding deletion + mylsm pin → Task 8 (shim deleted, 14 direct-call swaps, `find_common_ancestor` removed). §6 dead code → Task 8 (folded into binding deletion). §7 bolt → Task 0 + gates in 7/9/11. §8 README → Task 10. §9 testing → gates every task + Task 11.
+- **Spec coverage:** §1 laws-vs-tests → no test deletion (tests are IO wiring; verified no pure-duplicate asserts worth removing — Task 7 sweep keeps all 9 checks). §2 adapter+kit → Tasks 1-7 (probe load-bearing first, per spec). §3 comments → Tasks 3-6 Step 3 + Task 9. §4 bend-cli → absent by design. §5 binding deletion + mylsm pin + version-style imports → Task 8 (shim deleted, 14 direct-call swaps, `find_common_ancestor` removed) + Task 11 (19 import sites to `mylsm-lsm-store@0.3.1.0`, same hash). §6 dead code → Task 8 (folded into binding deletion). §7 bolt → Task 0 + gates in 7/9/11. §8 README → Task 10. §9 testing → gates every task + Task 12.
 - **Placeholders:** none — every code-changing step shows full code or exact-string tables; probe/adapter/README/spec rows are complete.
 - **Type consistency:** `Json.Val` / `JsonAdapter.{make_str,make_arr,make_kv,make_obj,parse_text,get_field,as_str,as_arr,encode_canonical}` identical across Tasks 2-6; `Sigma<&2, &2, String, _ => Json.Val>` matches kit's `items.obj` shape; `Maybe<&2, Json.Val>` replaces `Result<&2, &2, String, JsonLib.Json>` everywhere it appeared (`object_from_parse_result`, `tree_from_parse`, `commit_from_parse`, `index_from_text`).
 - **Bend legality:** adapter `fold_fields` shrinks in argument position 1; probe `probe_fold` same; constructor patterns `case Json.Str{text}:` / `case Merging.MergedEntries{...}:` are established in-repo (Certificate.bend); no `match` on computed values introduced; no forward references (adapter order: make_str/make_arr/make_kv/fold_pair/fold_fields/make_obj/parse_text/get_field/as_str/as_arr/encode_canonical).

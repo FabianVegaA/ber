@@ -36,9 +36,9 @@ Delete every `#` comment in `src/*.bend`, `LAWS.bend`, `PROOF.bend`, `tests/*.be
 
 Nothing in this branch. No `IO.args` CLI enters `ber/`. When reactivated, `bend-cli` imports `ber-core` by hash and owns all arg parsing and `open/run_sess` wiring.
 
-## 5. MyLSM 0.3.1.0 + binding deletion
+## 5. MyLSM 0.3.1.0 + binding deletion + version-style imports
 
-Pin already `0x0ae7ac793853e753f5f74c16e06ee078` everywhere (mylsm + `src/hub_sha/sha256.bend` subpath). No code change for the version.
+Pin content `0x0ae7ac793853e753f5f74c16e06ee078` everywhere (mylsm + `src/hub_sha/sha256.bend` subpath). Import style decision (2026-09-26): **version-style everywhere** — `mylsm-lsm-store@0.3.1.0/...` instead of `0x0ae7.../...`. The hash style was historical (hub presence was once uncertain; "hash = trust anchor"). Verified: the hub name is published and resolves to the identical hash (`~/.bend/lib/names/mylsm-lsm-store@0.3.1.0` → `0x0ae7...`, import-check green), so version style is equally pinned and reads cleaner — and it matches what the ber-core spec §2 already documents. This also aligns code with kit (`bend-kit-json@0.3.0.0`), ending the inconsistency. Mechanical substitution in 12 files (6 `src` + 6 `tests`, including `src/Db.bend` and `hub_sha` subpath imports); README keeps `name = hash` in the pin table so the anchor stays visible.
 
 Binding decision (2026-09-26): **delete `src/MyLsmBinding.bend` entirely.** The `store/load/remove_value` wrappers are 1:1 pass-throughs over `sput/sget/sdel` with zero logic — wrappers only earn their keep with complex logic. Consumers call `MyLsmStore.sput/sget/sdel` directly (same `Sess` types, same do-block shapes). The old "only the binding names MyLSM" rule is dropped; the honest rule is: MyLSM effects are called directly, MyLSM is still pinned by hash. 14 call sites in 3 files (`ContentObject` 2, `Staging` 3, `History` 9).
 
