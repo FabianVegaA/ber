@@ -1,7 +1,7 @@
 import Base
 import ../src/ContentObject.bend as ContentObject
-import 0x0ae7ac793853e753f5f74c16e06ee078/mylsm.bend as MyLsmStore
-import 0x0ae7ac793853e753f5f74c16e06ee078/src/Db.bend as DbTypes
+import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
+import mylsm-lsm-store@0.3.1.0/src/Db.bend as DbTypes
 
 def check_payload_text(loaded_object: ContentObject.ContentObject, expected_payload: String) -> Bool:
   match loaded_object:

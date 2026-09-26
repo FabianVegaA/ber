@@ -3,7 +3,7 @@ import ./Reading.bend as Reading
 import ./StateTree.bend as StateTree
 import ./History.bend as History
 import ./Merging.bend as Merging
-import 0x0ae7ac793853e753f5f74c16e06ee078/mylsm.bend as MyLsmStore
+import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
 
 # Independent merge verification. The PURE core re-derives everything from
 # entry lists: strategy known, result hash matches recomputed hash, merge

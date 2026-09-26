@@ -3,7 +3,7 @@ import ./Reading.bend as Reading
 import ./LogicalKey.bend as LogicalKey
 import ./StateTree.bend as StateTree
 import ./History.bend as History
-import 0x0ae7ac793853e753f5f74c16e06ee078/mylsm.bend as MyLsmStore
+import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
 
 # Structural tree diff. MEMBERSHIP-based (no ordering decisions) —
 # added = entries of second whose key is absent in first, symmetric removed,

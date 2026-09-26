@@ -6,7 +6,7 @@ import ./StateTree.bend as StateTree
 import ./Staging.bend as Staging
 import ./ContentObject.bend as ContentObject
 import ./MyLsmBinding.bend as Binding
-import 0x0ae7ac793853e753f5f74c16e06ee078/mylsm.bend as MyLsmStore
+import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
 import ../vendor/json/json.bend as JsonLib
 
 # Linear history: staging -> merged tree -> commit -> per-key version index.

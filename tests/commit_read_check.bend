@@ -4,8 +4,8 @@ import ../src/History.bend as History
 import ../src/StateTree.bend as StateTree
 import ../src/Reading.bend as Reading
 import ../src/LogicalKey.bend as LogicalKey
-import 0x0ae7ac793853e753f5f74c16e06ee078/mylsm.bend as MyLsmStore
-import 0x0ae7ac793853e753f5f74c16e06ee078/src/Db.bend as DbTypes
+import mylsm-lsm-store@0.3.1.0/mylsm.bend as MyLsmStore
+import mylsm-lsm-store@0.3.1.0/src/Db.bend as DbTypes
 
 def flag_text(check_name: String, condition: Bool) -> String:
   match condition:
