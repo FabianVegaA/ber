@@ -1,10 +1,12 @@
 import Base
-import 0x9ee2e9a299991dcc089fe22c7f3ceb5f/src/crypto/sha/sha256.bend as ProvenSha
+import 0x0ae7ac793853e753f5f74c16e06ee078/src/hub_sha/sha256.bend as ProvenSha
 import bend-codec-lib@0.2.0.0/utf8.bend as Utf8Lib
 import bend-codec-lib@0.2.0.0/bytes.bend as ByteLib
 
 # TRUSTED (do not re-prove): ProvenSha.sha256/hex — list-based core instantiated
-# over the FIPS 180-4 constants with a core refinement theorem upstream;
+# over the FIPS 180-4 constants with a core refinement theorem upstream,
+# vendored inside mylsm 0.3.1.0 (src/hub_sha, Window->ShaWindow rename for the
+# Base 2.0.28 collision — single source, no ber-core copy);
 # Utf8Lib.encode/decode — closed roundtrips proved upstream.
 # All imports check on Bend 2.0.27 (probe 2026-09-25).
 # OWNED glue: byte-list plumbing only (no array packing, no re-encoding) —

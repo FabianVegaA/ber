@@ -6,8 +6,8 @@ import ./StateTree.bend as StateTree
 import ./Staging.bend as Staging
 import ./ContentObject.bend as ContentObject
 import ./MyLsmBinding.bend as Binding
-import 0x8bf6d41adbe0e67e438f6cdc25a6cb6e/mylsm.bend as MyLsmStore
-import 0xf776c27e08f75fc19a070c691bcbb111/json.bend as JsonLib
+import 0x0ae7ac793853e753f5f74c16e06ee078/mylsm.bend as MyLsmStore
+import ../vendor/json/json.bend as JsonLib
 
 # Linear history: staging -> merged tree -> commit -> per-key version index.
 # Commits serialize as canonical JSON WITHOUT timestamp/certificate

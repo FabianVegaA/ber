@@ -1,7 +1,7 @@
 import Base
 import ./Reading.bend as Reading
 import ./ContentHash.bend as ContentHash
-import 0xf776c27e08f75fc19a070c691bcbb111/json.bend as JsonLib
+import ../vendor/json/json.bend as JsonLib
 
 # Flat sorted state tree (v0.1: no children partitioning). Entries sorted by
 # combined key ("namespace/record"); staged entries win ties. Tree hash covers

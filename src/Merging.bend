@@ -4,7 +4,7 @@ import ./LogicalKey.bend as LogicalKey
 import ./Comparison.bend as Comparison
 import ./StateTree.bend as StateTree
 import ./History.bend as History
-import 0x8bf6d41adbe0e67e438f6cdc25a6cb6e/mylsm.bend as MyLsmStore
+import 0x0ae7ac793853e753f5f74c16e06ee078/mylsm.bend as MyLsmStore
 
 # Three-way merge, strategy "union-disjoint". Pure core
 # (merge_entry_lists) decides per-key from (base, first, second) values with
