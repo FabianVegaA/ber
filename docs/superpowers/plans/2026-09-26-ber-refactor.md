@@ -10,6 +10,52 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-26-ber-refactor-design.md`
 
+## Final folder structure (after Task 11)
+
+```
+ber/
+├── AGENTS.md                          # unchanged
+├── LAWS.bend                          # comments rewritten (Task 9); claims byte-identical
+├── PROOF.bend                         # comments rewritten (Task 9); proofs untouched
+├── README.md                          # NEW (Task 10)
+├── bolt.bend                          # NEW (Task 0) — linter config
+├── benches/
+│   └── compare_bench.bend             # comments rewritten (Task 9)
+├── docs/superpowers/
+│   ├── plans/
+│   │   ├── 2026-09-25-ber-core.md     # unchanged (historical)
+│   │   └── 2026-09-26-ber-refactor.md # this plan
+│   └── specs/
+│       ├── 2026-09-25-ber-core-design.md  # §2.1 JSON row + §3.1 paragraph updated (Task 10)
+│       └── 2026-09-26-ber-refactor-design.md  # refactor spec
+├── src/
+│   ├── Certificate.bend               # comments rewritten (Task 9)
+│   ├── Comparison.bend                # comments rewritten (Task 9)
+│   ├── ContentHash.bend               # comments rewritten (Task 9)
+│   ├── ContentObject.bend             # migrated to adapter + comments (Task 3)
+│   ├── EqTheory.bend                  # comments rewritten (Task 9)
+│   ├── History.bend                   # migrated to adapter + comments (Task 5)
+│   ├── JsonAdapter.bend               # NEW (Task 2) — sole JSON owner
+│   ├── LogicalKey.bend                # comments rewritten (Task 9)
+│   ├── Merging.bend                   # find_common_ancestor removed (Task 8) + comments (Task 9)
+│   ├── MyLsmBinding.bend              # store_batch + WalTypes removed, v0.3.1.0 comment (Task 8)
+│   ├── Reading.bend                   # comments rewritten (Task 9)
+│   ├── Staging.bend                   # migrated to adapter + comments (Task 6)
+│   └── StateTree.bend                 # migrated to adapter + comments (Task 4)
+└── tests/
+    ├── certificate_check.bend         # comments rewritten (Task 9)
+    ├── commit_read_check.bend         # comments rewritten (Task 9)
+    ├── comparison_check.bend          # comments rewritten (Task 9)
+    ├── content_object_check.bend      # comments rewritten (Task 9)
+    ├── fanout_agreement_check.bend    # comments rewritten (Task 9)
+    ├── json_adapter_check.bend        # NEW (Task 2)
+    ├── logical_key_check.bend         # comments rewritten (Task 9)
+    ├── merging_check.bend             # comments rewritten (Task 9)
+    └── reading_check.bend             # comments rewritten (Task 9)
+```
+
+Deleted: `vendor/` (Task 7) and the transient `json_bytes_probe.bend` (created Task 1, deleted Task 7). No other files created, moved, or renamed. `bend-cli` stays out of this branch by decision.
+
 **Bend rules that bind every task (from `bend guide` + `AGENTS.md`):**
 - `match` only on parameters or pattern-bound variables; computed values go through a helper def.
 - No forward references: a def may only call defs declared ABOVE it. Adapter/probe def order matters.
@@ -774,7 +820,7 @@ git commit -m "chore(ber-core): drop dead find_common_ancestor and store_batch"
 ### Task 9: Comments rewrite — remaining files
 
 **Files:**
-- Modify: `src/Reading.bend`, `src/LogicalKey.bend`, `src/EqTheory.bend`, `src/Comparison.bend`, `src/Merging.bend`, `src/Certificate.bend`, `LAWS.bend`, `PROOF.bend`, `tests/*.bend`, `benches/compare_bench.bend`
+- Modify: `src/Reading.bend`, `src/LogicalKey.bend`, `src/ContentHash.bend`, `src/EqTheory.bend`, `src/Comparison.bend`, `src/Merging.bend`, `src/Certificate.bend`, `LAWS.bend`, `PROOF.bend`, `tests/*.bend`, `benches/compare_bench.bend`
 
 Rule (spec §3): delete every `#` line; write one header line per file (purpose + trust boundary if any) and one line per public def (contract, why-not-what, English, short). Law claims in `LAWS.bend` are NEVER edited — only `#` lines change (each law needs a comment above it for bolt `S001`). Insert the new comment line directly above each existing law in its CURRENT position; do not reorder laws; law bodies are shown as `...` below meaning "keep the existing line byte-identical".
 
@@ -801,6 +847,19 @@ def normalize_chain(...
 # separators so prefix scan stays possible at the storage layer.
 ```
 `split_combined_key` gets: `# Inverse of encode_logical_key: splits at the FIRST "/".`
+
+- [ ] **Step 3b: `src/ContentHash.bend`**
+
+```python
+# SHA-256 hex of UTF-8 text. ProvenSha/Utf8 cores are trusted upstream
+# (FIPS 180-4 machine-checked; closed roundtrips proved); this module owns
+# only the byte-list plumbing between them, covered by the differential
+# check vs Python hashlib at the 55/56/64-byte padding boundaries.
+```
+Plus one contract line on `compute_sha256_hex`:
+```python
+# "INVALID_UTF8_INPUT" on unencodable text; never fails on valid input.
+def compute_sha256_hex(...
 
 - [ ] **Step 3: `src/EqTheory.bend`**
 
@@ -989,7 +1048,7 @@ Run: `bend PROOF.bend` → `All terms check.`
 Run: `/Users/fvega/dev/bolt/bin/bolt.bin 2>&1 | tail -3` → `0 errors`; our `S001` warnings gone (remaining warnings: `S002` long LAWS lines + `L001` on IO shells — accepted per spec §7).
 
 ```bash
-git add src/Reading.bend src/LogicalKey.bend src/EqTheory.bend src/Comparison.bend src/Merging.bend src/Certificate.bend LAWS.bend PROOF.bend tests benches
+git add src/Reading.bend src/LogicalKey.bend src/ContentHash.bend src/EqTheory.bend src/Comparison.bend src/Merging.bend src/Certificate.bend LAWS.bend PROOF.bend tests benches
 git commit -m "docs(ber-core): rewrite all comments - headers, contracts, law one-liners"
 ```
 
