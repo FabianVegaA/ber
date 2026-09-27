@@ -180,3 +180,12 @@ def Laws.merge_conflict_count_one():
 
 def Laws.copy_preserves_length():
   {==}
+
+def Laws.fanout_quarters_agree_added():
+  {==}
+
+def Laws.fanout_quarters_agree_removed():
+  {==}
+
+def Laws.fanout_quarters_agree_modified():
+  {==}

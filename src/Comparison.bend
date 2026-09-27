@@ -211,6 +211,67 @@ def fan_out_modified(split_pair: List<&2, Reading.ChainEntry> & List<&2, Reading
 def fan_modified_entries(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> List<&2, ModifiedEntry>:
   fan_out_modified(split_entries(first_entries), second_entries)
 
+# Compares four quarters against private reference copies in parallel.
+def fan_added_quarters(even_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, odd_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
+  match even_split:
+    case (first_quarter, second_quarter):
+      match odd_split:
+        case (third_quarter, fourth_quarter):
+          first_added second_added third_added fourth_added = second_only_entries(copy_entries(reference_entries), first_quarter) second_only_entries(copy_entries(reference_entries), second_quarter) second_only_entries(copy_entries(reference_entries), third_quarter) second_only_entries(copy_entries(reference_entries), fourth_quarter)
+          List.append(&2, LogicalKey.LogicalKey, first_added, List.append(&2, LogicalKey.LogicalKey, second_added, List.append(&2, LogicalKey.LogicalKey, third_added, fourth_added)))
+
+# Splits the halves again and compares quarters.
+def fan_added_quad_split(second_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
+  match second_split:
+    case (even_entries, odd_entries):
+      fan_added_quarters(split_entries(even_entries), split_entries(odd_entries), reference_entries)
+
+# Fanned added-set computation over quarters.
+def fan_added_quad_entries(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
+  fan_added_quad_split(split_entries(second_entries), first_entries)
+
+# Compares four quarters against private reference copies in parallel.
+def fan_removed_quarters(even_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, odd_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
+  match even_split:
+    case (first_quarter, second_quarter):
+      match odd_split:
+        case (third_quarter, fourth_quarter):
+          first_removed second_removed third_removed fourth_removed = first_only_entries(copy_entries(reference_entries), first_quarter) first_only_entries(copy_entries(reference_entries), second_quarter) first_only_entries(copy_entries(reference_entries), third_quarter) first_only_entries(copy_entries(reference_entries), fourth_quarter)
+          List.append(&2, LogicalKey.LogicalKey, first_removed, List.append(&2, LogicalKey.LogicalKey, second_removed, List.append(&2, LogicalKey.LogicalKey, third_removed, fourth_removed)))
+
+# Splits the halves again and compares quarters.
+def fan_removed_quad_split(first_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
+  match first_split:
+    case (even_entries, odd_entries):
+      fan_removed_quarters(split_entries(even_entries), split_entries(odd_entries), reference_entries)
+
+# Fanned removed-set computation over quarters.
+def fan_removed_quad_entries(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
+  fan_removed_quad_split(split_entries(first_entries), second_entries)
+
+# Compares four quarters against private reference copies in parallel.
+def fan_modified_quarters(even_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, odd_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, ModifiedEntry>:
+  match even_split:
+    case (first_quarter, second_quarter):
+      match odd_split:
+        case (third_quarter, fourth_quarter):
+          first_modified second_modified third_modified fourth_modified = changed_pairs(copy_entries(reference_entries), first_quarter) changed_pairs(copy_entries(reference_entries), second_quarter) changed_pairs(copy_entries(reference_entries), third_quarter) changed_pairs(copy_entries(reference_entries), fourth_quarter)
+          List.append(&2, ModifiedEntry, first_modified, List.append(&2, ModifiedEntry, second_modified, List.append(&2, ModifiedEntry, third_modified, fourth_modified)))
+
+# Splits the halves again and compares quarters.
+def fan_modified_quad_split(first_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, ModifiedEntry>:
+  match first_split:
+    case (even_entries, odd_entries):
+      fan_modified_quarters(split_entries(even_entries), split_entries(odd_entries), reference_entries)
+
+# Fanned modified-set computation over quarters.
+def fan_modified_quad_entries(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> List<&2, ModifiedEntry>:
+  fan_modified_quad_split(split_entries(first_entries), second_entries)
+
+# Quad diff; sets and counts agree with sequential.
+def compare_entries_quad(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> CompareResult:
+  Make{fan_added_quad_entries(first_entries, second_entries), fan_removed_quad_entries(first_entries, second_entries), fan_modified_quad_entries(first_entries, second_entries), 0n, Nat.add(List.length(&2, Reading.ChainEntry, first_entries), List.length(&2, Reading.ChainEntry, second_entries))}
+
 # Parallel diff; sets and counts agree with sequential.
 def compare_entries_fanned(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> CompareResult:
   Make{fan_added_entries(first_entries, second_entries), fan_removed_entries(first_entries, second_entries), fan_modified_entries(first_entries, second_entries), 0n, Nat.add(List.length(&2, Reading.ChainEntry, first_entries), List.length(&2, Reading.ChainEntry, second_entries))}
@@ -227,9 +288,21 @@ def decide_fan_out(is_large: Bool, +first_entries: List<&2, Reading.ChainEntry>,
     case False{}:
       compare_sorted_entries(first_entries, second_entries)
 
-# Chooses sequential or fanned compare by size.
+# Entry count above which compare fans out over quarters.
+def quad_parallel_floor() -> Nat:
+  8192n
+
+# Chooses quad, fanned or sequential compare by size.
+def decide_auto_depth(is_huge: Bool, is_large: Bool, +first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> CompareResult:
+  match is_huge:
+    case True{}:
+      compare_entries_quad(first_entries, second_entries)
+    case False{}:
+      decide_fan_out(is_large, first_entries, second_entries)
+
+# Chooses sequential, fanned or quad compare by size.
 def compare_entries_auto(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> CompareResult:
-  decide_fan_out(Nat.is_ge(List.length(&2, Reading.ChainEntry, first_entries), comparison_parallel_threshold()), first_entries, second_entries)
+  decide_auto_depth(Nat.is_ge(List.length(&2, Reading.ChainEntry, first_entries), quad_parallel_floor()), Nat.is_ge(List.length(&2, Reading.ChainEntry, first_entries), comparison_parallel_threshold()), first_entries, second_entries)
 
 # Missing trees read as empty entry lists.
 def entries_or_empty(tree_maybe: Maybe<&2, StateTree.StateTreeNode>) -> List<&2, Reading.ChainEntry>:

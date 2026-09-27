@@ -294,3 +294,16 @@ law merge_conflict_count_one:
 # Copying preserves entry count.
 law copy_preserves_length:
   {List.length(&2, Reading.ChainEntry, Comparison.copy_entries(Con{Reading.make_entry("ledger/a", "1"), Con{Reading.make_entry("ledger/b", "2"), Nil{}}})) == 2n : Nat}
+
+# QUARTERS family: 4-way fan-out agrees with sequential on the fanout fixture.
+# Quarters and sequential agree on added.
+law fanout_quarters_agree_added:
+  {List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(Comparison.compare_entries_quad(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) == List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(Comparison.compare_sorted_entries(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) : Nat}
+
+# Quarters and sequential agree on removed.
+law fanout_quarters_agree_removed:
+  {List.length(&2, LogicalKey.LogicalKey, Comparison.removed_keys_of(Comparison.compare_entries_quad(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) == List.length(&2, LogicalKey.LogicalKey, Comparison.removed_keys_of(Comparison.compare_sorted_entries(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) : Nat}
+
+# Quarters and sequential agree on modified.
+law fanout_quarters_agree_modified:
+  {List.length(&2, Comparison.ModifiedEntry, Comparison.modified_entries_of(Comparison.compare_entries_quad(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) == List.length(&2, Comparison.ModifiedEntry, Comparison.modified_entries_of(Comparison.compare_sorted_entries(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) : Nat}

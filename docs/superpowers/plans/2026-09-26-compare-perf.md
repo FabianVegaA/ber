@@ -187,6 +187,15 @@ Verdict: crossover between 1k and 2k → threshold set to `2048n` (was `1024n`).
 | merge-sort | | | | |
 | bitonic | | | | |
 
+### Task 3 results 2026-09-26 (same session, native, 12 CPUs, `--threads 8`, fresh build with quad mode)
+
+| N | sequential wall | fanned 2-way wall | quad wall | quad speedup vs seq |
+|---:|---:|---:|---:|---:|
+| 1,000 | 1.11s | 1.13s | 1.23s | 0.90x (spawn overhead wins) |
+| 10,000 | 115.68s | 94.25s (1.23x) | **58.34s** | **1.98x** |
+
+Verdict: IMPROVED — lanes scale after private copies (2-way reproduces Task 1 at 1.23x; quad adds 1.62x over 2-way; `user` flat ~181-188s = no new contention). Counts agree on all paths. Quad floor 8192n stands (1k stays 2-way/seq via auto routing).
+
 ---
 
 ## Self-review

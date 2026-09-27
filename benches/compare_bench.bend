@@ -67,6 +67,18 @@ def run_sequential_only(+entry_count: Nat) -> IO(Unit):
   +second_entries : List<&2, Reading.ChainEntry> = gen_second_entries(entry_count, Nil{})
   report_sequential_only(entry_count, Comparison.compare_sorted_entries(gen_first_entries(entry_count, Nil{}), second_entries))
 
+# Prints quad-path counts.
+def report_quad_only(entry_count: Nat, +quad_result: Comparison.CompareResult) -> IO(Unit):
+  do IO<Unit>:
+    IO.print("entries=" ++ Nat.show(entry_count))
+    IO.print(count_line("quad-added", List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(quad_result))))
+    IO.print(count_line("quad-modified", List.length(&2, Comparison.ModifiedEntry, Comparison.modified_entries_of(quad_result))))
+
+# Builds generated lists and runs the quad compare.
+def run_quad_only(+entry_count: Nat) -> IO(Unit):
+  +second_entries : List<&2, Reading.ChainEntry> = gen_second_entries(entry_count, Nil{})
+  report_quad_only(entry_count, Comparison.compare_entries_quad(gen_first_entries(entry_count, Nil{}), second_entries))
+
 # Reads the mode argument; empty when absent.
 def remaining_head_or_empty(remaining_texts: List<String>) -> String:
   match remaining_texts:
@@ -79,6 +91,10 @@ def remaining_head_or_empty(remaining_texts: List<String>) -> String:
 def use_fanned_path(mode_text: String) -> Bool:
   String.eq(mode_text, "fan")
 
+# Selects the quad path on mode quad.
+def use_quad_path(mode_text: String) -> Bool:
+  String.eq(mode_text, "quad")
+
 # Runs the selected compare path.
 def dispatch_bench_path(mode_is_fan: Bool, +entry_count: Nat) -> IO(Unit):
   match mode_is_fan:
@@ -87,13 +103,21 @@ def dispatch_bench_path(mode_is_fan: Bool, +entry_count: Nat) -> IO(Unit):
     case False{}:
       run_sequential_only(entry_count)
 
+# Runs the quad path or defers to the fan/sequential dispatch.
+def dispatch_quad_or_fan(mode_is_quad: Bool, mode_is_fan: Bool, +entry_count: Nat) -> IO(Unit):
+  match mode_is_quad:
+    case True{}:
+      run_quad_only(entry_count)
+    case False{}:
+      dispatch_bench_path(mode_is_fan, entry_count)
+
 # Runs with parsed size, defaulting to 1000 entries.
-def bench_with_size(read_maybe: Maybe<&2, Nat>, mode_is_fan: Bool) -> IO(Unit):
+def bench_with_size(read_maybe: Maybe<&2, Nat>, +mode_text: String) -> IO(Unit):
   match read_maybe:
     case None{}:
-      dispatch_bench_path(mode_is_fan, 1000n)
+      dispatch_quad_or_fan(use_quad_path(mode_text), use_fanned_path(mode_text), 1000n)
     case Some{entry_count}:
-      dispatch_bench_path(mode_is_fan, entry_count)
+      dispatch_quad_or_fan(use_quad_path(mode_text), use_fanned_path(mode_text), entry_count)
 
 # Parses size and mode args, then runs.
 def dispatch_bench_args(args_texts: List<String>) -> IO(Unit):
@@ -101,7 +125,7 @@ def dispatch_bench_args(args_texts: List<String>) -> IO(Unit):
     case Nil{}:
       run_sequential_only(1000n)
     case Con{size_text, remaining_texts}:
-      bench_with_size(Nat.read(size_text), use_fanned_path(remaining_head_or_empty(remaining_texts)))
+      bench_with_size(Nat.read(size_text), remaining_head_or_empty(remaining_texts))
 
 # Entry point: reads argv and runs the bench.
 def main() -> IO(Unit):
