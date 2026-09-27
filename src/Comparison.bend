@@ -217,7 +217,7 @@ def compare_entries_fanned(+first_entries: List<&2, Reading.ChainEntry>, +second
 
 # Entry count above which compare fans out.
 def comparison_parallel_threshold() -> Nat:
-  1024n
+  2048n
 
 # Fans out only past the threshold.
 def decide_fan_out(is_large: Bool, +first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> CompareResult:

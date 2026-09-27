@@ -169,6 +169,16 @@ Matrix from the protocol on both variants + current path. Winner rule: wall firs
 
 Verdict: IMPROVED. Contention theory confirmed — fanned `user` dropped 229s→181s (less atomic overhead); wall 114.76s→90.68s. Loss zone at 1k shrinks (0.88x→0.98x) but persists: keep threshold retune (Task 2).
 
+### Task 2 results 2026-09-26 (crossover bracketed, same binary/protocol)
+
+| N | sequential wall | fanned wall | speedup |
+|---:|---:|---:|---:|
+| 1,000 | 1.11s | 1.13s | 0.98x |
+| 2,048 | 4.95s | 4.79s | 1.03x |
+| 4,096 | 19.32s | 17.74s | 1.09x |
+
+Verdict: crossover between 1k and 2k → threshold set to `2048n` (was `1024n`). No law pins the value (verified by rg). Note: the bench exercises direct paths; the threshold gates only the shell `compare_entries_auto` path, whose results are identical either way by the agreement laws — PROOF green confirms.
+
 ### Epic results (fill on execution)
 
 | Path | 1k wall | 10k wall | laws | lines |
