@@ -1,6 +1,6 @@
 {
   "name": "ber-core",
   "description": "Version-controlled state with machine-checked merge proofs: content-addressed objects, Merkle trees, three-way union-disjoint merge with verifiable certificates.",
-  "import": "import ber-core-store@0.1.1.0/ber.bend as Ber",
+  "import": "import ber-core-store@0.1.2.0/ber.bend as Ber",
   "category": "packages"
 }
