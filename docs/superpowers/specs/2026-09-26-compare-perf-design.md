@@ -1,6 +1,6 @@
 # Compare perf — design (fan-out scaling + sort-merge epic)
 
-Date: 2026-09-26. Branch: `perf/compare-fanout` (from tag-0.1.0.0 lineage + LICENSE). Status: approved for implementation.
+Date: 2026-09-26. Branch: `perf/compare-fanout` (from tag-0.1.0.0 lineage + LICENSE). Status: implemented and recorded (see Measurements in the plan doc).
 Scope: `src/Comparison.bend` hot path only. Out of scope: GPU (`!`, divergent workload per spec §6), ber-cli IO facade, `pack.json`/publish, `SchemaLaw`, parquet-row parsing.
 
 ## 1. Diagnosis (measured 2026-09-26, native binary, 12 CPUs)

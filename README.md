@@ -81,7 +81,7 @@ Values are multi-type (`Text`, structured `Object`, binary `Blob`), never bare t
 | `src/StateTree.bend` | flat sorted tree, hash, serde |
 | `src/Staging.bend` | uncommitted working set |
 | `src/History.bend` | commits, versioned reads, chain walk |
-| `src/Comparison.bend` | membership diff + parallel fan-out |
+| `src/Comparison.bend` | sorted-path diff (default) + membership oracle |
 | `src/Merging.bend` | three-way union-disjoint merge + LCA |
 | `src/Certificate.bend` | independent merge verification |
 | `src/EqTheory.bend` | reflexivity tower for proofs |
@@ -90,10 +90,11 @@ Values are multi-type (`Text`, structured `Object`, binary `Blob`), never bare t
 
 ```bash
 bend benches/compare_bench.bend -o /tmp/compare_bench_bin
-/tmp/compare_bench_bin 10000 fan
+/tmp/compare_bench_bin --threads 8 10000 sort   # sorted path (default)
+/tmp/compare_bench_bin --threads 8 10000        # sequential reference
 ```
 
-Sequential vs fanned compare; see the v0.3 notes in `docs/superpowers/plans/2026-09-25-ber-core.md`.
+Sequential reference vs sorted-path compare; numbers in `docs/superpowers/plans/2026-09-26-compare-perf.md`.
 
 ## Roadmap
 

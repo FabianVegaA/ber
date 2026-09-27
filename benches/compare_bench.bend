@@ -3,8 +3,8 @@ import ../src/Reading.bend as Reading
 import ../src/Comparison.bend as Comparison
 import ../src/LogicalKey.bend as LogicalKey
 
-# Bench: generated entry lists, sequential vs fanned compare, wall-timed
-# natively. Checker-normalized runs are NOT timed.
+# Bench: generated entry lists, sequential vs sorted-path compare,
+# wall-timed natively. Checker-normalized runs are NOT timed.
 
 # Generates the base entry list with versioned values.
 def gen_first_entries(remaining: Nat, accum_entries: List<&2, Reading.ChainEntry>) -> List<&2, Reading.ChainEntry>:
@@ -34,19 +34,19 @@ def gen_second_entries(remaining: Nat, accum_entries: List<&2, Reading.ChainEntr
 def count_line(label_text: String, counted: Nat) -> String:
   label_text ++ "=" ++ Nat.show(counted)
 
-# Prints sequential vs fanned counts side by side.
+# Prints sequential-path counts.
 def report_sequential_only(entry_count: Nat, +sequential_result: Comparison.CompareResult) -> IO(Unit):
   do IO<Unit>:
     IO.print("entries=" ++ Nat.show(entry_count))
     IO.print(count_line("sequential-added", List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(sequential_result))))
     IO.print(count_line("sequential-modified", List.length(&2, Comparison.ModifiedEntry, Comparison.modified_entries_of(sequential_result))))
 
-# Builds generated lists and runs the fanned compare.
+# Builds generated lists and runs the sequential compare.
 def run_sequential_only(+entry_count: Nat) -> IO(Unit):
   +second_entries : List<&2, Reading.ChainEntry> = gen_second_entries(entry_count, Nil{})
   report_sequential_only(entry_count, Comparison.compare_sorted_entries(gen_first_entries(entry_count, Nil{}), second_entries))
 
-# Prints quad-path counts.
+# Reads the mode argument; empty when absent.
 def remaining_head_or_empty(remaining_texts: List<String>) -> String:
   match remaining_texts:
     case Nil{}:
@@ -54,7 +54,7 @@ def remaining_head_or_empty(remaining_texts: List<String>) -> String:
     case Con{head_text, tail_texts}:
       head_text
 
-# Selects the fanned path on mode fan.
+# Prints sorted-path counts.
 def report_sort_only(entry_count: Nat, +sort_result: Comparison.CompareResult) -> IO(Unit):
   do IO<Unit>:
     IO.print("entries=" ++ Nat.show(entry_count))
