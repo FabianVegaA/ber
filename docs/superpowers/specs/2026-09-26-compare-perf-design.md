@@ -90,7 +90,10 @@ SELECT values through arguments (`pick`), never steer recursion. Same
 reason our membership diff compiles (full scans + value-select params).
 
 Consequences: the membership-diff shape is final in safe Bend; remaining
-levers are parallelism over fixed structure (Tasks 1–3) and constants.
-Sorting alone cannot help (membership is order-independent), so Variant B
-was never implemented — moot, not just expensive. This extends the
-inversion wall (spec §5.1) with a second language-expressiveness boundary.
+levers were parallelism over fixed structure (Tasks 1–3, now obsolete) and
+the sorted path (shipped). Variant B WAS later implemented per user request
+for an empirical comparison (`vendor/bitonic/`, String keys, `~` sentinel,
+4 laws green, counts agreed) and measured: 1.33s at 10k vs 0.15s merge-sort
+(~9x slower: 64% padding waste + O(n log²n)). Deleted same commit per epic
+rule. This extends the inversion wall (spec §5.1) with a second
+language-expressiveness boundary.

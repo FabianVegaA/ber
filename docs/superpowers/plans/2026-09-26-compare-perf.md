@@ -179,23 +179,25 @@ Verdict: IMPROVED. Contention theory confirmed — fanned `user` dropped 229s→
 
 Verdict: crossover between 1k and 2k → threshold set to `2048n` (was `1024n`). No law pins the value (verified by rg). Note: the bench exercises direct paths; the threshold gates only the shell `compare_entries_auto` path, whose results are identical either way by the agreement laws — PROOF green confirms.
 
-### Epic results: sorted path wins by 760x, wired as default (2026-09-26, revives the abandoned verdict below)
+### Epic results: empirical bitonic comparison + merge-sort wins (2026-09-26)
 
-| Path | 1k wall | 10k wall | laws | lines |
+| Path | 1k wall | 10k wall | laws | verdict |
 |---|---|---|---|---|
-| membership (+old fan/quad) | 1.11s | 115.68s | oracle kept | deleted paths |
-| sorted (merge-sort + linear) | 0.01s | **0.15s** | 5 sort laws | ~90 kernel |
+| membership (seq) | 1.11s | 114.08s | oracle kept | reference |
+| merge-sort + linear | 0.01s | **0.15s** | 5 sort laws | **WINNER (760x)** |
+| bitonic vendored | 0.50s | 1.33s | 4 laws (deleted) | loser: 9x slower (padding 2^14 + O(n log²n)) |
 
-Verdict: SORT WINS. `compare_entries_auto` routes everything through the
-sorted path (wins at every measured size, down to N=100). Deleted per epic
-rule: 25 fan/quad defs, 7 laws (`fanout_agree_*`, `quarters_agree_*`,
-`copy_preserves_length`), fan/quad bench modes. Kept: membership core + its
-laws as the safe differential oracle, seq/sort bench modes. Bitonic variant
-never built (user scoped down: one working sort suffices). `@unsafe`
-confined to 4 kernel defs (forward refs for conditional advance); 5 concrete
-laws pin behavior; spec §7 records the boundary.
+Bitonic was CORRECT (counts agreed, 4 laws green) but ~9x slower than
+merge-sort: 64% padding waste at 10k (16384 leaves for 10000 entries) plus
+the comparison-count gap. Deleted per epic rule same commit: `vendor/`,
+4 bitonic laws+proofs, `compare_entries_bitonic`, bitonic bench mode.
+`compare_entries_auto` routes everything through the sorted path (wins at
+every measured size, down to N=100); membership core + laws stay as the
+safe differential oracle.
 
-Previous verdict (superseded): NEITHER — Variant A rejected in safe Bend;
+Previous verdicts (superseded, kept for the record): sort-merge ABANDONED as
+infeasible in safe Bend, then revived under confined `@unsafe`; fan/quad
+machinery (25 defs + 7 laws) deleted as obsolete at 760x.
 revived under confined `@unsafe` per user decision.
 
 ### Task 3 results 2026-09-26 (same session, native, 12 CPUs, `--threads 8`, fresh build with quad mode)
