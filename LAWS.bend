@@ -289,3 +289,8 @@ law merge_branch_count_three:
 # Same-key-different-value merge conflicts on exactly one key.
 law merge_conflict_count_one:
   {List.length(&2, LogicalKey.LogicalKey, Merging.conflicting_keys_of(Merging.merge_entry_lists(Con{Reading.make_entry("ledger/record_base", "base_version"), Nil{}}, Con{Reading.make_entry("ledger/record_base", "version_ex"), Nil{}}, Con{Reading.make_entry("ledger/record_base", "version_wye"), Nil{}}))) == 1n : Nat}
+
+# COPY family: the private-copy helper preserves behavior inputs.
+# Copying preserves entry count.
+law copy_preserves_length:
+  {List.length(&2, Reading.ChainEntry, Comparison.copy_entries(Con{Reading.make_entry("ledger/a", "1"), Con{Reading.make_entry("ledger/b", "2"), Nil{}}})) == 2n : Nat}

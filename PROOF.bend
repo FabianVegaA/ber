@@ -177,3 +177,6 @@ def Laws.merge_branch_count_three():
 
 def Laws.merge_conflict_count_one():
   {==}
+
+def Laws.copy_preserves_length():
+  {==}

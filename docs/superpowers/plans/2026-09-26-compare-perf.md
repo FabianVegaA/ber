@@ -160,12 +160,14 @@ Matrix from the protocol on both variants + current path. Winner rule: wall firs
 | 1,000 | 1.11s | 1.16–1.26s | 0.88–0.96x | yes |
 | 10,000 | 115.98s | 114.76s | 1.01x | yes |
 
-### Task 1 results (fill on execution)
+### Task 1 results 2026-09-26 (native, 12 CPUs, `--threads 8`, fresh build)
 
 | N | sequential wall | fanned wall | speedup | laws green |
 |---:|---:|---:|---|---|
-| 1,000 | | | | |
-| 10,000 | | | | |
+| 1,000 | 1.11s | 1.13s | 0.98x | yes |
+| 10,000 | 113.18s | 90.68s | **1.25x** | yes |
+
+Verdict: IMPROVED. Contention theory confirmed — fanned `user` dropped 229s→181s (less atomic overhead); wall 114.76s→90.68s. Loss zone at 1k shrinks (0.88x→0.98x) but persists: keep threshold retune (Task 2).
 
 ### Epic results (fill on execution)
 

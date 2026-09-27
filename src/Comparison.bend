@@ -158,9 +158,17 @@ def split_entries(+source_entries: List<&2, Reading.ChainEntry>) -> List<&2, Rea
   split_step(source_entries, True{}, Nil{}, Nil{})
 
 
-# Compares both halves against the reference in parallel.
+# Copies the spine so each lane scans a private list without atomics.
+def copy_entries(source_entries: List<&2, Reading.ChainEntry>) -> List<&2, Reading.ChainEntry>:
+  match source_entries:
+    case Nil{}:
+      Nil{}
+    case Con{head_entry, remaining_entries}:
+      Con{head_entry, copy_entries(remaining_entries)}
+
+# Compares both halves against private reference copies in parallel.
 def fan_added_halves(even_entries: List<&2, Reading.ChainEntry>, odd_entries: List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
-  even_added odd_added = second_only_entries(reference_entries, even_entries) second_only_entries(reference_entries, odd_entries)
+  even_added odd_added = second_only_entries(copy_entries(reference_entries), even_entries) second_only_entries(copy_entries(reference_entries), odd_entries)
   List.append(&2, LogicalKey.LogicalKey, even_added, odd_added)
 
 # Unpacks the split pair into the fanned added step.
@@ -173,9 +181,9 @@ def fan_out_pair(split_pair: List<&2, Reading.ChainEntry> & List<&2, Reading.Cha
 def fan_added_entries(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
   fan_out_pair(split_entries(second_entries), first_entries)
 
-# Compares both halves against the reference in parallel.
+# Compares both halves against private reference copies in parallel.
 def fan_removed_halves(even_entries: List<&2, Reading.ChainEntry>, odd_entries: List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
-  even_removed odd_removed = first_only_entries(reference_entries, even_entries) first_only_entries(reference_entries, odd_entries)
+  even_removed odd_removed = first_only_entries(copy_entries(reference_entries), even_entries) first_only_entries(copy_entries(reference_entries), odd_entries)
   List.append(&2, LogicalKey.LogicalKey, even_removed, odd_removed)
 
 # Unpacks the split pair into the fanned removed step.
@@ -188,9 +196,9 @@ def fan_out_removed(split_pair: List<&2, Reading.ChainEntry> & List<&2, Reading.
 def fan_removed_entries(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
   fan_out_removed(split_entries(first_entries), second_entries)
 
-# Compares both halves against the reference in parallel.
+# Compares both halves against private reference copies in parallel.
 def fan_modified_halves(even_entries: List<&2, Reading.ChainEntry>, odd_entries: List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, ModifiedEntry>:
-  even_modified odd_modified = changed_pairs(reference_entries, even_entries) changed_pairs(reference_entries, odd_entries)
+  even_modified odd_modified = changed_pairs(copy_entries(reference_entries), even_entries) changed_pairs(copy_entries(reference_entries), odd_entries)
   List.append(&2, ModifiedEntry, even_modified, odd_modified)
 
 # Unpacks the split pair into the fanned modified step.
