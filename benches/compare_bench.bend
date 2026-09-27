@@ -35,22 +35,6 @@ def count_line(label_text: String, counted: Nat) -> String:
   label_text ++ "=" ++ Nat.show(counted)
 
 # Prints sequential vs fanned counts side by side.
-def report_result(entry_count: Nat, +sequential_result: Comparison.CompareResult, +fanned_result: Comparison.CompareResult) -> IO(Unit):
-  do IO<Unit>:
-    IO.print("entries=" ++ Nat.show(entry_count))
-    IO.print(count_line("sequential-added", List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(sequential_result))))
-    IO.print(count_line("sequential-modified", List.length(&2, Comparison.ModifiedEntry, Comparison.modified_entries_of(sequential_result))))
-    IO.print(count_line("fanned-added", List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(fanned_result))))
-    IO.print(count_line("fanned-modified", List.length(&2, Comparison.ModifiedEntry, Comparison.modified_entries_of(fanned_result))))
-
-# Prints fanned-path counts.
-def report_fanned_only(entry_count: Nat, +fanned_result: Comparison.CompareResult) -> IO(Unit):
-  do IO<Unit>:
-    IO.print("entries=" ++ Nat.show(entry_count))
-    IO.print(count_line("fanned-added", List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(fanned_result))))
-    IO.print(count_line("fanned-modified", List.length(&2, Comparison.ModifiedEntry, Comparison.modified_entries_of(fanned_result))))
-
-# Prints sequential-path counts.
 def report_sequential_only(entry_count: Nat, +sequential_result: Comparison.CompareResult) -> IO(Unit):
   do IO<Unit>:
     IO.print("entries=" ++ Nat.show(entry_count))
@@ -58,28 +42,11 @@ def report_sequential_only(entry_count: Nat, +sequential_result: Comparison.Comp
     IO.print(count_line("sequential-modified", List.length(&2, Comparison.ModifiedEntry, Comparison.modified_entries_of(sequential_result))))
 
 # Builds generated lists and runs the fanned compare.
-def run_fanned_only(+entry_count: Nat) -> IO(Unit):
-  +second_entries : List<&2, Reading.ChainEntry> = gen_second_entries(entry_count, Nil{})
-  report_fanned_only(entry_count, Comparison.compare_entries_fanned(gen_first_entries(entry_count, Nil{}), second_entries))
-
-# Builds generated lists and runs the sequential compare.
 def run_sequential_only(+entry_count: Nat) -> IO(Unit):
   +second_entries : List<&2, Reading.ChainEntry> = gen_second_entries(entry_count, Nil{})
   report_sequential_only(entry_count, Comparison.compare_sorted_entries(gen_first_entries(entry_count, Nil{}), second_entries))
 
 # Prints quad-path counts.
-def report_quad_only(entry_count: Nat, +quad_result: Comparison.CompareResult) -> IO(Unit):
-  do IO<Unit>:
-    IO.print("entries=" ++ Nat.show(entry_count))
-    IO.print(count_line("quad-added", List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(quad_result))))
-    IO.print(count_line("quad-modified", List.length(&2, Comparison.ModifiedEntry, Comparison.modified_entries_of(quad_result))))
-
-# Builds generated lists and runs the quad compare.
-def run_quad_only(+entry_count: Nat) -> IO(Unit):
-  +second_entries : List<&2, Reading.ChainEntry> = gen_second_entries(entry_count, Nil{})
-  report_quad_only(entry_count, Comparison.compare_entries_quad(gen_first_entries(entry_count, Nil{}), second_entries))
-
-# Reads the mode argument; empty when absent.
 def remaining_head_or_empty(remaining_texts: List<String>) -> String:
   match remaining_texts:
     case Nil{}:
@@ -88,36 +55,37 @@ def remaining_head_or_empty(remaining_texts: List<String>) -> String:
       head_text
 
 # Selects the fanned path on mode fan.
-def use_fanned_path(mode_text: String) -> Bool:
-  String.eq(mode_text, "fan")
+def report_sort_only(entry_count: Nat, +sort_result: Comparison.CompareResult) -> IO(Unit):
+  do IO<Unit>:
+    IO.print("entries=" ++ Nat.show(entry_count))
+    IO.print(count_line("sort-added", List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(sort_result))))
+    IO.print(count_line("sort-modified", List.length(&2, Comparison.ModifiedEntry, Comparison.modified_entries_of(sort_result))))
 
-# Selects the quad path on mode quad.
-def use_quad_path(mode_text: String) -> Bool:
-  String.eq(mode_text, "quad")
+# Builds generated lists and runs the sorted-path compare.
+def run_sort_only(+entry_count: Nat) -> IO(Unit):
+  +second_entries : List<&2, Reading.ChainEntry> = gen_second_entries(entry_count, Nil{})
+  +first_entries : List<&2, Reading.ChainEntry> = gen_first_entries(entry_count, Nil{})
+  report_sort_only(entry_count, Comparison.compare_entries_sorted(first_entries, second_entries))
 
-# Runs the selected compare path.
-def dispatch_bench_path(mode_is_fan: Bool, +entry_count: Nat) -> IO(Unit):
-  match mode_is_fan:
+# Selects the sorted path on mode sort.
+def use_sort_path(mode_text: String) -> Bool:
+  String.eq(mode_text, "sort")
+
+# Runs the sorted path or the sequential reference path.
+def dispatch_sort_or_seq(mode_is_sort: Bool, +entry_count: Nat) -> IO(Unit):
+  match mode_is_sort:
     case True{}:
-      run_fanned_only(entry_count)
+      run_sort_only(entry_count)
     case False{}:
       run_sequential_only(entry_count)
-
-# Runs the quad path or defers to the fan/sequential dispatch.
-def dispatch_quad_or_fan(mode_is_quad: Bool, mode_is_fan: Bool, +entry_count: Nat) -> IO(Unit):
-  match mode_is_quad:
-    case True{}:
-      run_quad_only(entry_count)
-    case False{}:
-      dispatch_bench_path(mode_is_fan, entry_count)
 
 # Runs with parsed size, defaulting to 1000 entries.
 def bench_with_size(read_maybe: Maybe<&2, Nat>, +mode_text: String) -> IO(Unit):
   match read_maybe:
     case None{}:
-      dispatch_quad_or_fan(use_quad_path(mode_text), use_fanned_path(mode_text), 1000n)
+      dispatch_sort_or_seq(use_sort_path(mode_text), 1000n)
     case Some{entry_count}:
-      dispatch_quad_or_fan(use_quad_path(mode_text), use_fanned_path(mode_text), entry_count)
+      dispatch_sort_or_seq(use_sort_path(mode_text), entry_count)
 
 # Parses size and mode args, then runs.
 def dispatch_bench_args(args_texts: List<String>) -> IO(Unit):

@@ -12,8 +12,6 @@ import ./Store.bend as Store
 # parallel; counts and sets agree with the sequential path, order does not
 # (downstream merge sorts before hashing, so order never leaks into hashes).
 
-
-
 # One changed key with its before/after hashes.
 type ModifiedEntry is Data:
   Changed{changed_key: LogicalKey.LogicalKey, before_hash: String, after_hash: String}
@@ -140,7 +138,6 @@ def changed_pairs(+second_entries: List<&2, Reading.ChainEntry>, first_entries: 
 def compare_sorted_entries(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> CompareResult:
   Make{second_only_entries(first_entries, second_entries), first_only_entries(second_entries, first_entries), changed_pairs(second_entries, first_entries), 0n, Nat.add(List.length(&2, Reading.ChainEntry, first_entries), List.length(&2, Reading.ChainEntry, second_entries))}
 
-
 # Alternates entries into even/odd accumulators, then reverses.
 def split_step(entries: List<&2, Reading.ChainEntry>, take_head: Bool, evens_accum: List<&2, Reading.ChainEntry>, odds_accum: List<&2, Reading.ChainEntry>) -> List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>:
   match entries:
@@ -157,152 +154,124 @@ def split_step(entries: List<&2, Reading.ChainEntry>, take_head: Bool, evens_acc
 def split_entries(+source_entries: List<&2, Reading.ChainEntry>) -> List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>:
   split_step(source_entries, True{}, Nil{}, Nil{})
 
-
 # Copies the spine so each lane scans a private list without atomics.
-def copy_entries(source_entries: List<&2, Reading.ChainEntry>) -> List<&2, Reading.ChainEntry>:
-  match source_entries:
+def decide_linear_value(values_equal: Bool, +first_head: Reading.ChainEntry, +second_head: Reading.ChainEntry, +tail_diff: CompareResult) -> CompareResult:
+  match values_equal:
+    case True{}:
+      Make{added_keys_of(tail_diff), removed_keys_of(tail_diff), modified_entries_of(tail_diff), pruned_count_of(tail_diff), Nat.add(2n, compared_entry_count_of(tail_diff))}
+    case False{}:
+      Make{added_keys_of(tail_diff), removed_keys_of(tail_diff), Con{Changed{entry_to_logical_key(first_head), Reading.entry_value_of(first_head), Reading.entry_value_of(second_head)}, modified_entries_of(tail_diff)}, pruned_count_of(tail_diff), Nat.add(2n, compared_entry_count_of(tail_diff))}
+
+# Merges one step by key order; both sides kept on ties (stable).
+# @unsafe: calls merge_by_key below (branch-dependent recursion needs the
+# forward reference); terminates in practice (one side always shrinks).
+@unsafe
+def merge_order(ordering: Cmp, first_head: Reading.ChainEntry, first_tail: List<&2, Reading.ChainEntry>, second_head: Reading.ChainEntry, second_tail: List<&2, Reading.ChainEntry>) -> List<&2, Reading.ChainEntry>:
+  match ordering:
+    case LT{}:
+      Con{first_head, merge_by_key(first_tail, Con{second_head, second_tail})}
+    case GT{}:
+      Con{second_head, merge_by_key(Con{first_head, first_tail}, second_tail)}
+    case EQ{}:
+      Con{first_head, Con{second_head, merge_by_key(first_tail, second_tail)}}
+
+# Unpacks the key comparison into the ordering step.
+def merge_dispatch(cmp_result: (String & String) & Cmp, first_head: Reading.ChainEntry, first_tail: List<&2, Reading.ChainEntry>, second_head: Reading.ChainEntry, second_tail: List<&2, Reading.ChainEntry>) -> List<&2, Reading.ChainEntry>:
+  match cmp_result:
+    case ((returned_first, returned_second), ordering):
+      merge_order(ordering, first_head, first_tail, second_head, second_tail)
+
+# Linear merge of two sorted lists by entry key.
+# @unsafe: the greater-side branch recurses on a reconstructed list, which
+# the termination checker cannot see through; one side always shrinks.
+@unsafe
+def merge_by_key(first_sorted: List<&2, Reading.ChainEntry>, second_sorted: List<&2, Reading.ChainEntry>) -> List<&2, Reading.ChainEntry>:
+  match first_sorted:
     case Nil{}:
-      Nil{}
-    case Con{head_entry, remaining_entries}:
-      Con{head_entry, copy_entries(remaining_entries)}
+      second_sorted
+    case Con{+first_head, first_tail}:
+      match second_sorted:
+        case Nil{}:
+          Con{first_head, first_tail}
+        case Con{+second_head, second_tail}:
+          merge_dispatch(String.cmp(Reading.entry_key_of(first_head), Reading.entry_key_of(second_head)), first_head, first_tail, second_head, second_tail)
 
-# Compares both halves against private reference copies in parallel.
-def fan_added_halves(even_entries: List<&2, Reading.ChainEntry>, odd_entries: List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
-  even_added odd_added = second_only_entries(copy_entries(reference_entries), even_entries) second_only_entries(copy_entries(reference_entries), odd_entries)
-  List.append(&2, LogicalKey.LogicalKey, even_added, odd_added)
-
-# Unpacks the split pair into the fanned added step.
-def fan_out_pair(split_pair: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
+# Merges the sorted halves of one split pair.
+# @unsafe: calls sort_fuel below (split halves are computed, not structural).
+@unsafe
+def sort_split_halves(split_pair: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +remaining_fuel: Nat) -> List<&2, Reading.ChainEntry>:
   match split_pair:
     case (even_entries, odd_entries):
-      fan_added_halves(even_entries, odd_entries, reference_entries)
+      merge_by_key(sort_fuel(remaining_fuel, even_entries), sort_fuel(remaining_fuel, odd_entries))
 
-# Fanned added-set computation.
-def fan_added_entries(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
-  fan_out_pair(split_entries(second_entries), first_entries)
+# Merge sort with Nat fuel; fuel bounds recursion depth, not size.
+def sort_fuel(remaining_fuel: Nat, unsorted_entries: List<&2, Reading.ChainEntry>) -> List<&2, Reading.ChainEntry>:
+  match remaining_fuel:
+    case 0n:
+      unsorted_entries
+    case 1n+fuel_left:
+      match unsorted_entries:
+        case Nil{}:
+          Nil{}
+        case Con{single_entry, Nil{}}:
+          Con{single_entry, Nil{}}
+        case Con{first_entry, Con{second_entry, remaining_entries}}:
+          sort_split_halves(split_entries(unsorted_entries), fuel_left)
 
-# Compares both halves against private reference copies in parallel.
-def fan_removed_halves(even_entries: List<&2, Reading.ChainEntry>, odd_entries: List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
-  even_removed odd_removed = first_only_entries(copy_entries(reference_entries), even_entries) first_only_entries(copy_entries(reference_entries), odd_entries)
-  List.append(&2, LogicalKey.LogicalKey, even_removed, odd_removed)
+# Sorts entries by key; fuel starts at the entry count.
+def sort_entries_by_key(+unsorted_entries: List<&2, Reading.ChainEntry>) -> List<&2, Reading.ChainEntry>:
+  sort_fuel(List.length(&2, Reading.ChainEntry, unsorted_entries), unsorted_entries)
 
-# Unpacks the split pair into the fanned removed step.
-def fan_out_removed(split_pair: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
-  match split_pair:
-    case (even_entries, odd_entries):
-      fan_removed_halves(even_entries, odd_entries, reference_entries)
+# Decides one linear-diff step by key order.
+# @unsafe: calls merge_sorted_diff below (branch-dependent recursion needs
+# the forward reference); one side always shrinks.
+@unsafe
+def decide_linear_order(ordering: Cmp, +first_head: Reading.ChainEntry, first_tail: List<&2, Reading.ChainEntry>, +second_head: Reading.ChainEntry, second_tail: List<&2, Reading.ChainEntry>) -> CompareResult:
+  match ordering:
+    case LT{}:
+      prepend_linear_removed(first_head, merge_sorted_diff(first_tail, Con{second_head, second_tail}))
+    case GT{}:
+      prepend_linear_added(second_head, merge_sorted_diff(Con{first_head, first_tail}, second_tail))
+    case EQ{}:
+      decide_linear_value(String.eq(Reading.entry_value_of(first_head), Reading.entry_value_of(second_head)), first_head, second_head, merge_sorted_diff(first_tail, second_tail))
 
-# Fanned removed-set computation.
-def fan_removed_entries(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
-  fan_out_removed(split_entries(first_entries), second_entries)
+# Prepends a removed key to a computed tail diff; one entry consumed.
+def prepend_linear_removed(+head_entry: Reading.ChainEntry, +tail_diff: CompareResult) -> CompareResult:
+  Make{added_keys_of(tail_diff), Con{entry_to_logical_key(head_entry), removed_keys_of(tail_diff)}, modified_entries_of(tail_diff), pruned_count_of(tail_diff), Nat.add(1n, compared_entry_count_of(tail_diff))}
 
-# Compares both halves against private reference copies in parallel.
-def fan_modified_halves(even_entries: List<&2, Reading.ChainEntry>, odd_entries: List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, ModifiedEntry>:
-  even_modified odd_modified = changed_pairs(copy_entries(reference_entries), even_entries) changed_pairs(copy_entries(reference_entries), odd_entries)
-  List.append(&2, ModifiedEntry, even_modified, odd_modified)
+# Prepends an added key to a computed tail diff; one entry consumed.
+def prepend_linear_added(+head_entry: Reading.ChainEntry, +tail_diff: CompareResult) -> CompareResult:
+  Make{Con{entry_to_logical_key(head_entry), added_keys_of(tail_diff)}, removed_keys_of(tail_diff), modified_entries_of(tail_diff), pruned_count_of(tail_diff), Nat.add(1n, compared_entry_count_of(tail_diff))}
 
-# Unpacks the split pair into the fanned modified step.
-def fan_out_modified(split_pair: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, ModifiedEntry>:
-  match split_pair:
-    case (even_entries, odd_entries):
-      fan_modified_halves(even_entries, odd_entries, reference_entries)
+# Unpacks the key comparison into the linear-diff step.
+def dispatch_linear_diff(cmp_result: (String & String) & Cmp, +first_head: Reading.ChainEntry, first_tail: List<&2, Reading.ChainEntry>, +second_head: Reading.ChainEntry, second_tail: List<&2, Reading.ChainEntry>) -> CompareResult:
+  match cmp_result:
+    case ((returned_first, returned_second), ordering):
+      decide_linear_order(ordering, first_head, first_tail, second_head, second_tail)
 
-# Fanned modified-set computation.
-def fan_modified_entries(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> List<&2, ModifiedEntry>:
-  fan_out_modified(split_entries(first_entries), second_entries)
+# Decides one linear-diff step over sorted heads.
+def linear_diff_heads(+first_head: Reading.ChainEntry, first_tail: List<&2, Reading.ChainEntry>, +second_head: Reading.ChainEntry, second_tail: List<&2, Reading.ChainEntry>) -> CompareResult:
+  dispatch_linear_diff(String.cmp(Reading.entry_key_of(first_head), Reading.entry_key_of(second_head)), first_head, first_tail, second_head, second_tail)
 
-# Compares four quarters against private reference copies in parallel.
-def fan_added_quarters(even_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, odd_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
-  match even_split:
-    case (first_quarter, second_quarter):
-      match odd_split:
-        case (third_quarter, fourth_quarter):
-          first_added second_added third_added fourth_added = second_only_entries(copy_entries(reference_entries), first_quarter) second_only_entries(copy_entries(reference_entries), second_quarter) second_only_entries(copy_entries(reference_entries), third_quarter) second_only_entries(copy_entries(reference_entries), fourth_quarter)
-          List.append(&2, LogicalKey.LogicalKey, first_added, List.append(&2, LogicalKey.LogicalKey, second_added, List.append(&2, LogicalKey.LogicalKey, third_added, fourth_added)))
+# Linear diff over two sorted lists; counts cover both inputs.
+def merge_sorted_diff(+first_sorted: List<&2, Reading.ChainEntry>, +second_sorted: List<&2, Reading.ChainEntry>) -> CompareResult:
+  match first_sorted:
+    case Nil{}:
+      Make{second_only_entries(Nil{}, second_sorted), Nil{}, Nil{}, 0n, List.length(&2, Reading.ChainEntry, second_sorted)}
+    case Con{first_head, first_tail}:
+      match second_sorted:
+        case Nil{}:
+          Make{Nil{}, first_only_entries(Nil{}, Con{first_head, first_tail}), Nil{}, 0n, List.length(&2, Reading.ChainEntry, Con{first_head, first_tail})}
+        case Con{second_head, second_tail}:
+          linear_diff_heads(first_head, first_tail, second_head, second_tail)
 
-# Splits the halves again and compares quarters.
-def fan_added_quad_split(second_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
-  match second_split:
-    case (even_entries, odd_entries):
-      fan_added_quarters(split_entries(even_entries), split_entries(odd_entries), reference_entries)
+# Sorted-path diff: sorts both lists, then linear-diffs.
+def compare_entries_sorted(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> CompareResult:
+  merge_sorted_diff(sort_entries_by_key(first_entries), sort_entries_by_key(second_entries))
 
-# Fanned added-set computation over quarters.
-def fan_added_quad_entries(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
-  fan_added_quad_split(split_entries(second_entries), first_entries)
-
-# Compares four quarters against private reference copies in parallel.
-def fan_removed_quarters(even_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, odd_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
-  match even_split:
-    case (first_quarter, second_quarter):
-      match odd_split:
-        case (third_quarter, fourth_quarter):
-          first_removed second_removed third_removed fourth_removed = first_only_entries(copy_entries(reference_entries), first_quarter) first_only_entries(copy_entries(reference_entries), second_quarter) first_only_entries(copy_entries(reference_entries), third_quarter) first_only_entries(copy_entries(reference_entries), fourth_quarter)
-          List.append(&2, LogicalKey.LogicalKey, first_removed, List.append(&2, LogicalKey.LogicalKey, second_removed, List.append(&2, LogicalKey.LogicalKey, third_removed, fourth_removed)))
-
-# Splits the halves again and compares quarters.
-def fan_removed_quad_split(first_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
-  match first_split:
-    case (even_entries, odd_entries):
-      fan_removed_quarters(split_entries(even_entries), split_entries(odd_entries), reference_entries)
-
-# Fanned removed-set computation over quarters.
-def fan_removed_quad_entries(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> List<&2, LogicalKey.LogicalKey>:
-  fan_removed_quad_split(split_entries(first_entries), second_entries)
-
-# Compares four quarters against private reference copies in parallel.
-def fan_modified_quarters(even_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, odd_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, ModifiedEntry>:
-  match even_split:
-    case (first_quarter, second_quarter):
-      match odd_split:
-        case (third_quarter, fourth_quarter):
-          first_modified second_modified third_modified fourth_modified = changed_pairs(copy_entries(reference_entries), first_quarter) changed_pairs(copy_entries(reference_entries), second_quarter) changed_pairs(copy_entries(reference_entries), third_quarter) changed_pairs(copy_entries(reference_entries), fourth_quarter)
-          List.append(&2, ModifiedEntry, first_modified, List.append(&2, ModifiedEntry, second_modified, List.append(&2, ModifiedEntry, third_modified, fourth_modified)))
-
-# Splits the halves again and compares quarters.
-def fan_modified_quad_split(first_split: List<&2, Reading.ChainEntry> & List<&2, Reading.ChainEntry>, +reference_entries: List<&2, Reading.ChainEntry>) -> List<&2, ModifiedEntry>:
-  match first_split:
-    case (even_entries, odd_entries):
-      fan_modified_quarters(split_entries(even_entries), split_entries(odd_entries), reference_entries)
-
-# Fanned modified-set computation over quarters.
-def fan_modified_quad_entries(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> List<&2, ModifiedEntry>:
-  fan_modified_quad_split(split_entries(first_entries), second_entries)
-
-# Quad diff; sets and counts agree with sequential.
-def compare_entries_quad(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> CompareResult:
-  Make{fan_added_quad_entries(first_entries, second_entries), fan_removed_quad_entries(first_entries, second_entries), fan_modified_quad_entries(first_entries, second_entries), 0n, Nat.add(List.length(&2, Reading.ChainEntry, first_entries), List.length(&2, Reading.ChainEntry, second_entries))}
-
-# Parallel diff; sets and counts agree with sequential.
-def compare_entries_fanned(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> CompareResult:
-  Make{fan_added_entries(first_entries, second_entries), fan_removed_entries(first_entries, second_entries), fan_modified_entries(first_entries, second_entries), 0n, Nat.add(List.length(&2, Reading.ChainEntry, first_entries), List.length(&2, Reading.ChainEntry, second_entries))}
-
-# Entry count above which compare fans out.
-def comparison_parallel_threshold() -> Nat:
-  2048n
-
-# Fans out only past the threshold.
-def decide_fan_out(is_large: Bool, +first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> CompareResult:
-  match is_large:
-    case True{}:
-      compare_entries_fanned(first_entries, second_entries)
-    case False{}:
-      compare_sorted_entries(first_entries, second_entries)
-
-# Entry count above which compare fans out over quarters.
-def quad_parallel_floor() -> Nat:
-  8192n
-
-# Chooses quad, fanned or sequential compare by size.
-def decide_auto_depth(is_huge: Bool, is_large: Bool, +first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> CompareResult:
-  match is_huge:
-    case True{}:
-      compare_entries_quad(first_entries, second_entries)
-    case False{}:
-      decide_fan_out(is_large, first_entries, second_entries)
-
-# Chooses sequential, fanned or quad compare by size.
+# Routes every compare through the sorted path; fastest at all sizes.
 def compare_entries_auto(+first_entries: List<&2, Reading.ChainEntry>, +second_entries: List<&2, Reading.ChainEntry>) -> CompareResult:
-  decide_auto_depth(Nat.is_ge(List.length(&2, Reading.ChainEntry, first_entries), quad_parallel_floor()), Nat.is_ge(List.length(&2, Reading.ChainEntry, first_entries), comparison_parallel_threshold()), first_entries, second_entries)
+  compare_entries_sorted(first_entries, second_entries)
 
 # Missing trees read as empty entry lists.
 def entries_or_empty(tree_maybe: Maybe<&2, StateTree.StateTreeNode>) -> List<&2, Reading.ChainEntry>:

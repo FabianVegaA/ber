@@ -179,20 +179,24 @@ Verdict: IMPROVED. Contention theory confirmed — fanned `user` dropped 229s→
 
 Verdict: crossover between 1k and 2k → threshold set to `2048n` (was `1024n`). No law pins the value (verified by rg). Note: the bench exercises direct paths; the threshold gates only the shell `compare_entries_auto` path, whose results are identical either way by the agreement laws — PROOF green confirms.
 
-### Epic results: sort-merge ABANDONED with evidence (2026-09-26)
+### Epic results: sorted path wins by 760x, wired as default (2026-09-26, revives the abandoned verdict below)
 
 | Path | 1k wall | 10k wall | laws | lines |
 |---|---|---|---|---|
-| current (membership + 4-way) | 1.23s | 58.34s | 61 | — |
-| merge-sort | — | — | — | — (infeasible, see below) |
-| bitonic | — | — | — | — (moot, see below) |
+| membership (+old fan/quad) | 1.11s | 115.68s | oracle kept | deleted paths |
+| sorted (merge-sort + linear) | 0.01s | **0.15s** | 5 sort laws | ~90 kernel |
 
-Verdict: NEITHER. Variant A (~90 lines written) rejected by the checker —
-conditional-advance recursion needs forward references, forbidden in safe
-Bend (spec §7). Variant B never implemented: bitonic compiles only through
-fixed-structure recursion, and sorting alone cannot speed an
-order-independent membership diff. Code reverted (`git checkout` of the 3
-files, working tree clean, PROOF green); knowledge kept in spec §7.
+Verdict: SORT WINS. `compare_entries_auto` routes everything through the
+sorted path (wins at every measured size, down to N=100). Deleted per epic
+rule: 25 fan/quad defs, 7 laws (`fanout_agree_*`, `quarters_agree_*`,
+`copy_preserves_length`), fan/quad bench modes. Kept: membership core + its
+laws as the safe differential oracle, seq/sort bench modes. Bitonic variant
+never built (user scoped down: one working sort suffices). `@unsafe`
+confined to 4 kernel defs (forward refs for conditional advance); 5 concrete
+laws pin behavior; spec §7 records the boundary.
+
+Previous verdict (superseded): NEITHER — Variant A rejected in safe Bend;
+revived under confined `@unsafe` per user decision.
 
 ### Task 3 results 2026-09-26 (same session, native, 12 CPUs, `--threads 8`, fresh build with quad mode)
 

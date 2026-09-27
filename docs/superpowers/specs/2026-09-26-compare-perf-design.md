@@ -55,7 +55,23 @@ The real algorithmic fix (sort once + linear merge instead of quadratic scans). 
 
 `bend PROOF.bend` green after every task (existing agreement laws pin behavior; new laws for new defs); `bolt` 0 errors; every bench table recorded in the plan doc Measurements section; `LAWS.bend` claims reviewed (worker writes, human reviews per standing delegation).
 
-## 7. Negative result: sort-merge infeasible in safe Bend (verified 2026-09-26)
+## 7. Sort-merge via confined @unsafe (revives the negative result below)
+
+Update 2026-09-26 (user decision): ship the working sort even under
+`@unsafe` as long as results improve. Each `@unsafe` mark cites the forward
+reference it needs; behavior is pinned by concrete laws (sorted-output
+literal + differential counts vs membership). Boundary note:
+`@unsafe` here waives order/termination checking per-def, exactly like kit's
+encoder — normalization still closes every `{==}` law (66 green).
+
+Original negative result (superseded, kept for the record): sequential
+merge sort + linear diff were first written fully safe and REJECTED — helpers
+matching a computed comparison cannot call back into the function needing
+the branch result (checker: "live code cannot use it"). So conditional
+advance stays inexpressible in SAFE Bend; fixed-structure recursion (bitonic,
+membership scans) compiles. Variant B (bitonic) never implemented: sorting
+alone is pointless without linear diff, and with linear diff revived under
+`@unsafe`, a second variant adds proof cost for no expected gain.
 
 Attempted: sequential merge sort + linear two-pointer diff (Variant A), then
 adapted bitonic (Variant B). Variant A was written (~90 lines: merge_order /

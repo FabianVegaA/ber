@@ -237,34 +237,21 @@ law hash_known_answer_abc:
 law hash_distinct_hello_world:
   {String.eq(ContentHash.compute_sha256_hex("hello"), ContentHash.compute_sha256_hex("world")) == False{} : Bool}
 
-# FANOUT family: fanned and sequential paths agree on counts, pinned on a
-# small concrete fixture (added/removed/modified all exercised once).
+# MEMBERSHIP family: the reference diff pins counts on a small concrete
+# fixture (added/removed/modified all exercised once). Kept as the safe
+# differential oracle for the sorted path.
 # Sequential added count on the fixture.
-law fanout_seq_added_one:
+law membership_added_one:
   {List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(Comparison.compare_sorted_entries(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) == 1n : Nat}
 
 # Sequential removed count on the fixture.
-law fanout_seq_removed_one:
+law membership_removed_one:
   {List.length(&2, LogicalKey.LogicalKey, Comparison.removed_keys_of(Comparison.compare_sorted_entries(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) == 1n : Nat}
 
 # Sequential modified count on the fixture.
-law fanout_seq_modified_one:
+law membership_modified_one:
   {List.length(&2, Comparison.ModifiedEntry, Comparison.modified_entries_of(Comparison.compare_sorted_entries(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) == 1n : Nat}
 
-# Fanned and sequential agree on added.
-law fanout_agree_added:
-  {List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(Comparison.compare_entries_fanned(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) == List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(Comparison.compare_sorted_entries(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) : Nat}
-
-# Fanned and sequential agree on removed.
-law fanout_agree_removed:
-  {List.length(&2, LogicalKey.LogicalKey, Comparison.removed_keys_of(Comparison.compare_entries_fanned(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) == List.length(&2, LogicalKey.LogicalKey, Comparison.removed_keys_of(Comparison.compare_sorted_entries(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) : Nat}
-
-# Fanned and sequential agree on modified.
-law fanout_agree_modified:
-  {List.length(&2, Comparison.ModifiedEntry, Comparison.modified_entries_of(Comparison.compare_entries_fanned(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) == List.length(&2, Comparison.ModifiedEntry, Comparison.modified_entries_of(Comparison.compare_sorted_entries(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) : Nat}
-
-# BRANCH family: the comparison_check branch fixture as count laws, plus the
-# hash-prune shortcut on identical trees.
 # Branch diff adds exactly one key.
 law compare_branch_added_one:
   {List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(Comparison.compare_sorted_entries(Con{Reading.make_entry("ledger/record_base", "base_version"), Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Nil{}}}, Con{Reading.make_entry("ledger/record_base", "base_version"), Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}}))) == 1n : Nat}
@@ -290,20 +277,22 @@ law merge_branch_count_three:
 law merge_conflict_count_one:
   {List.length(&2, LogicalKey.LogicalKey, Merging.conflicting_keys_of(Merging.merge_entry_lists(Con{Reading.make_entry("ledger/record_base", "base_version"), Nil{}}, Con{Reading.make_entry("ledger/record_base", "version_ex"), Nil{}}, Con{Reading.make_entry("ledger/record_base", "version_wye"), Nil{}}))) == 1n : Nat}
 
-# COPY family: the private-copy helper preserves behavior inputs.
-# Copying preserves entry count.
-law copy_preserves_length:
-  {List.length(&2, Reading.ChainEntry, Comparison.copy_entries(Con{Reading.make_entry("ledger/a", "1"), Con{Reading.make_entry("ledger/b", "2"), Nil{}}})) == 2n : Nat}
+# Merge sort orders the fixture by key.
+law sort_fixture_sorted:
+  {Comparison.sort_entries_by_key(Con{Reading.make_entry("ledger/c", "3"), Con{Reading.make_entry("ledger/a", "1"), Con{Reading.make_entry("ledger/b", "2"), Nil{}}}}) == Con{Reading.make_entry("ledger/a", "1"), Con{Reading.make_entry("ledger/b", "2"), Con{Reading.make_entry("ledger/c", "3"), Nil{}}}} : List<&2, Reading.ChainEntry>}
 
-# QUARTERS family: 4-way fan-out agrees with sequential on the fanout fixture.
-# Quarters and sequential agree on added.
-law fanout_quarters_agree_added:
-  {List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(Comparison.compare_entries_quad(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) == List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(Comparison.compare_sorted_entries(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) : Nat}
+# Sorting preserves entry count.
+law sort_preserves_count:
+  {List.length(&2, Reading.ChainEntry, Comparison.sort_entries_by_key(Con{Reading.make_entry("ledger/c", "3"), Con{Reading.make_entry("ledger/a", "1"), Con{Reading.make_entry("ledger/b", "2"), Nil{}}}})) == 3n : Nat}
 
-# Quarters and sequential agree on removed.
-law fanout_quarters_agree_removed:
-  {List.length(&2, LogicalKey.LogicalKey, Comparison.removed_keys_of(Comparison.compare_entries_quad(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) == List.length(&2, LogicalKey.LogicalKey, Comparison.removed_keys_of(Comparison.compare_sorted_entries(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) : Nat}
+# Linear diff agrees with membership diff on added.
+law sort_merge_agree_added:
+  {List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(Comparison.merge_sorted_diff(Comparison.sort_entries_by_key(Con{Reading.make_entry("ledger/record_base", "base_version"), Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Nil{}}}), Comparison.sort_entries_by_key(Con{Reading.make_entry("ledger/record_base", "base_version"), Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}})))) == List.length(&2, LogicalKey.LogicalKey, Comparison.added_keys_of(Comparison.compare_sorted_entries(Con{Reading.make_entry("ledger/record_base", "base_version"), Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Nil{}}}, Con{Reading.make_entry("ledger/record_base", "base_version"), Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}}))) : Nat}
 
-# Quarters and sequential agree on modified.
-law fanout_quarters_agree_modified:
-  {List.length(&2, Comparison.ModifiedEntry, Comparison.modified_entries_of(Comparison.compare_entries_quad(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) == List.length(&2, Comparison.ModifiedEntry, Comparison.modified_entries_of(Comparison.compare_sorted_entries(Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2"), Con{Reading.make_entry("bench/key-3", "version-3"), Nil{}}}}, Con{Reading.make_entry("bench/key-1", "version-1"), Con{Reading.make_entry("bench/key-2", "version-2-changed"), Con{Reading.make_entry("bench/key-4", "version-4"), Nil{}}}}))) : Nat}
+# Linear diff agrees with membership diff on removed.
+law sort_merge_agree_removed:
+  {List.length(&2, LogicalKey.LogicalKey, Comparison.removed_keys_of(Comparison.merge_sorted_diff(Comparison.sort_entries_by_key(Con{Reading.make_entry("ledger/record_base", "base_version"), Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Nil{}}}), Comparison.sort_entries_by_key(Con{Reading.make_entry("ledger/record_base", "base_version"), Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}})))) == List.length(&2, LogicalKey.LogicalKey, Comparison.removed_keys_of(Comparison.compare_sorted_entries(Con{Reading.make_entry("ledger/record_base", "base_version"), Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Nil{}}}, Con{Reading.make_entry("ledger/record_base", "base_version"), Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}}))) : Nat}
+
+# Linear diff agrees with membership diff on modified.
+law sort_merge_agree_modified:
+  {List.length(&2, Comparison.ModifiedEntry, Comparison.modified_entries_of(Comparison.merge_sorted_diff(Comparison.sort_entries_by_key(Con{Reading.make_entry("ledger/record_base", "base_version"), Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Nil{}}}), Comparison.sort_entries_by_key(Con{Reading.make_entry("ledger/record_base", "base_version"), Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}})))) == List.length(&2, Comparison.ModifiedEntry, Comparison.modified_entries_of(Comparison.compare_sorted_entries(Con{Reading.make_entry("ledger/record_base", "base_version"), Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Nil{}}}, Con{Reading.make_entry("ledger/record_base", "base_version"), Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}}))) : Nat}

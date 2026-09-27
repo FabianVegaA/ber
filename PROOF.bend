@@ -142,23 +142,17 @@ def Laws.hash_known_answer_abc():
 def Laws.hash_distinct_hello_world():
   {==}
 
-def Laws.fanout_seq_added_one():
+def Laws.membership_added_one():
   {==}
 
-def Laws.fanout_seq_removed_one():
+def Laws.membership_removed_one():
   {==}
 
-def Laws.fanout_seq_modified_one():
+def Laws.membership_modified_one():
   {==}
 
-def Laws.fanout_agree_added():
-  {==}
 
-def Laws.fanout_agree_removed():
-  {==}
 
-def Laws.fanout_agree_modified():
-  {==}
 
 def Laws.compare_branch_added_one():
   {==}
@@ -178,14 +172,21 @@ def Laws.merge_branch_count_three():
 def Laws.merge_conflict_count_one():
   {==}
 
-def Laws.copy_preserves_length():
+
+
+
+
+def Laws.sort_fixture_sorted():
   {==}
 
-def Laws.fanout_quarters_agree_added():
+def Laws.sort_preserves_count():
   {==}
 
-def Laws.fanout_quarters_agree_removed():
+def Laws.sort_merge_agree_added():
   {==}
 
-def Laws.fanout_quarters_agree_modified():
+def Laws.sort_merge_agree_removed():
+  {==}
+
+def Laws.sort_merge_agree_modified():
   {==}
