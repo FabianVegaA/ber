@@ -190,3 +190,33 @@ def Laws.sort_merge_agree_removed():
 
 def Laws.sort_merge_agree_modified():
   {==}
+
+def Laws.journal_pure_empty():
+  {==}
+
+def Laws.journal_put_single():
+  {==}
+
+def Laws.journal_del_single():
+  {==}
+
+def Laws.journal_get_empty():
+  {==}
+
+def Laws.journal_bind_appends():
+  {==}
+
+def Laws.open_default_is_dotber():
+  {==}
+
+def Laws.walk_fuel_empty_zero():
+  {==}
+
+def Laws.walk_fuel_parent_keeps():
+  {==}
+
+def Laws.lca_fuel_hit_zero():
+  {==}
+
+def Laws.lca_fuel_miss_keeps():
+  {==}

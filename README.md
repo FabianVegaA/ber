@@ -62,7 +62,7 @@ Values are multi-type (`Text`, structured `Object`, binary `Blob`), never bare t
 
 | Package | Pin |
 |---|---|
-| mylsm | `mylsm-lsm-store@0.3.1.0` = `0x0ae7ac793853e753f5f74c16e06ee078` |
+| mylsm | `mylsm-lsm-store@0.3.2.0` = `0x9b667819f2297aa52572c1e6523fa301` |
 | bend-kit-json | `bend-kit-json@0.3.0.0` = `0xaaa10a97bf5ac6990143da2c863f8a3f` (behind `src/JsonAdapter.bend`) |
 | bend-codec-lib | `bend-codec-lib@0.2.0.0` (UTF-8 for the SHA glue, hex for binary values) |
 | SHA-256 | mylsm's vendored `hub_sha` (FIPS 180-4 proven upstream) — single source, no copy |
@@ -72,7 +72,7 @@ Values are multi-type (`Text`, structured `Object`, binary `Blob`), never bare t
 | File | Responsibility |
 |---|---|
 | `ber.bend` | public API: domain delegates + composed operations |
-| `src/Store.bend` | session monad (`Op`/`Handle`); the only file naming MyLSM |
+| `src/Store.bend` | sessions (`Op`/`Handle`), mutation journal, durable open/flush; the only file naming MyLSM |
 | `src/Value.bend` | multi-type stored values (text, document, blob) |
 | `src/LogicalKey.bend` | key encoding + physical layout builders |
 | `src/ContentHash.bend` | SHA-256 hex over UTF-8 bytes (trusted core + tiny glue) |

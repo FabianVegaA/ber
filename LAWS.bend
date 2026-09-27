@@ -1,4 +1,7 @@
 import Base
+import ./src/Store.bend as Store
+import ./src/History.bend as History
+import mylsm-lsm-store@0.3.2.0/src/Wal.bend as WalTypes
 import ./src/Reading.bend as Reading
 import ./src/LogicalKey.bend as LogicalKey
 import ./src/ContentHash.bend as ContentHash
@@ -158,6 +161,50 @@ law verify_rejects_tampered_tree:
 # Empty law evidence rejects — asserting nothing proves nothing.
 law verify_rejects_empty_laws:
   {Certificate.verify_merge_certificate_pure(Nil{}, Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Nil{}}, Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}, Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}}, Merging.Make{"commit_first", "commit_second", "commit_base", StateTree.compute_tree_hash(Con{Reading.make_entry("ledger/record_alpha", "alpha_version"), Con{Reading.make_entry("ledger/record_beta", "beta_version"), Nil{}}}), "union-disjoint", Nil{}}) == False{} : Bool}
+
+# DURABLE family: the Op journal threads physical mutations in execution order
+# for the WAL runner. Pure run_op drops it; run_op_tracked exposes it.
+# Laws observe through tracked_journal (laws import Wal only for expected
+# values; Store stays the single runtime module naming MyLSM).
+# Pure ops journal nothing.
+law journal_pure_empty:
+  {Store.tracked_journal(&2, Unit, Store.run_op_tracked(&2, Unit, Store.open_store("journal-law"), Store.Op.pure(&2, Unit, Unit{}))) == Nil{} : List<&2, WalTypes.Mut>}
+
+# One put journals exactly its mutation.
+law journal_put_single:
+  {Store.tracked_journal(&2, Unit, Store.run_op_tracked(&2, Unit, Store.open_store("journal-law"), Store.oput("k", "v"))) == Con{WalTypes.Put{"k", "v"}, Nil{}} : List<&2, WalTypes.Mut>}
+
+# One delete journals exactly its mutation.
+law journal_del_single:
+  {Store.tracked_journal(&2, Unit, Store.run_op_tracked(&2, Unit, Store.open_store("journal-law"), Store.odel("k"))) == Con{WalTypes.Del{"k"}, Nil{}} : List<&2, WalTypes.Mut>}
+
+# Reads journal nothing.
+law journal_get_empty:
+  {Store.tracked_journal(&2, Maybe<&2, String>, Store.run_op_tracked(&2, Maybe<&2, String>, Store.open_store("journal-law"), Store.oget("k"))) == Nil{} : List<&2, WalTypes.Mut>}
+
+# Sequenced ops concatenate journals in execution order.
+law journal_bind_appends:
+  {Store.tracked_journal(&2, Unit, Store.run_op_tracked(&2, Unit, Store.open_store("journal-law"), Store.Op.bind(&2, Unit, Unit, Store.oput("k", "v"), sequenced_unit => Store.odel("k")))) == Con{WalTypes.Put{"k", "v"}, Con{WalTypes.Del{"k"}, Nil{}}} : List<&2, WalTypes.Mut>}
+
+# Default store labels ./.ber.
+law open_default_is_dotber:
+  {Store.open_default_store() == Store.open_store("./.ber") : Store.Handle}
+
+# Walk fuel: empty parent text ends the descent, otherwise fuel continues.
+law walk_fuel_empty_zero:
+  {History.fuel_for_empty(True{}, 10000n) == 0n : Nat}
+
+# Nonempty parent keeps the remaining fuel.
+law walk_fuel_parent_keeps:
+  {History.fuel_for_empty(False{}, 10000n) == 10000n : Nat}
+
+# LCA fuel: a hit ends the ascent, otherwise fuel continues.
+law lca_fuel_hit_zero:
+  {Merging.lca_fuel_left(True{}, 10000n) == 0n : Nat}
+
+# A miss keeps the remaining fuel.
+law lca_fuel_miss_keeps:
+  {Merging.lca_fuel_left(False{}, 10000n) == 10000n : Nat}
 
 # Equality theory, universal: comparison is reflexive (EqTheory tower).
 # String equality is reflexive.

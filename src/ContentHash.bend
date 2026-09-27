@@ -1,5 +1,5 @@
 import Base
-import mylsm-lsm-store@0.3.1.0/src/hub_sha/sha256.bend as ProvenSha
+import mylsm-lsm-store@0.3.2.0/src/hub_sha/sha256.bend as ProvenSha
 import bend-codec-lib@0.2.0.0/utf8.bend as Utf8Lib
 import bend-codec-lib@0.2.0.0/bytes.bend as ByteLib
 

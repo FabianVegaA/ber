@@ -421,15 +421,34 @@ def first_parent_text(commit_maybe: Maybe<&2, Commit>) -> String:
     case Some{found_commit}:
       first_parent_name(commit_parents_of(found_commit))
 
-# Walks first-parents with fuel; newest first.
-def walk_commit_chain(remaining_fuel: Nat, +commit_identifier: String) -> Store.Op<&2, List<&2, String>>:
-  match remaining_fuel:
-    case 0n:
+# Unknown links end the walk: their index probes can never hit, so search
+# results are unchanged while misses stop descending (empty parent text is
+# terminal: missing commits and parentless roots both resolve to "").
+def fuel_for_empty(is_empty: Bool, gated_left: Nat) -> Nat:
+  match is_empty:
+    case True{}:
+      0n
+    case False{}:
+      gated_left
+
+# Gates the remaining fuel on parent emptiness.
+def fuel_for_parent(+parent_text: String, gated_left: Nat) -> Nat:
+  fuel_for_empty(String.eq(parent_text, ""), gated_left)
+
+# Walks first-parents with fuel; newest first. checker_fuel decreases every
+# level for the termination checker; gated_fuel carries the early stop.
+# Callers pass the same fuel twice.
+def walk_commit_chain(checker_fuel: Nat, gated_fuel: Nat, +commit_identifier: String) -> Store.Op<&2, List<&2, String>>:
+  match checker_fuel gated_fuel:
+    case 0n _:
       empty_string_list()
-    case 1n+fuel_left:
+    case 1n+checker_left 0n:
+      empty_string_list()
+    case 1n+checker_left 1n+gated_left:
       do Store.Op<&2, List<&2, String>>:
         commit_maybe : Maybe<&2, Commit> <- load_commit(commit_identifier)
-        tail_chain : List<&2, String> <- walk_commit_chain(fuel_left, first_parent_text(commit_maybe))
+        +parent_text : String = first_parent_text(commit_maybe)
+        tail_chain : List<&2, String> <- walk_commit_chain(checker_left, fuel_for_parent(parent_text, gated_left), parent_text)
         return Con{commit_identifier, tail_chain}
 
 # A stored value wins; otherwise the tail result.
@@ -489,7 +508,7 @@ def resolve_found_entry(found_maybe: Maybe<&2, Reading.ChainEntry>) -> Store.Op<
 # Reads a namespaced value at a commit.
 def read_value_at(+namespace_name: String, +record_identifier: String, +commit_identifier: String) -> Store.Op<&2, Maybe<&2, Value.Value>>:
   do Store.Op<&2, Maybe<&2, Value.Value>>:
-    ancestor_chain : List<&2, String> <- walk_commit_chain(10000n, commit_identifier)
+    ancestor_chain : List<&2, String> <- walk_commit_chain(10000n, 10000n, commit_identifier)
     found_entry : Maybe<&2, Reading.ChainEntry> <- search_chain_entries(ancestor_chain, namespace_name, record_identifier)
     resolved_value : Maybe<&2, Value.Value> <- resolve_found_entry(found_entry)
     return resolved_value

@@ -206,15 +206,28 @@ def decide_lca_found(is_common: Bool, +commit_identifier: String, tail_result: M
     case False{}:
       tail_result
 
-# Walks the second branch for the first ancestor-set hit.
-def find_first_common(+ancestor_set: List<&2, String>, remaining_fuel: Nat, +commit_identifier: String) -> Store.Op<&2, Maybe<&2, String>>:
-  match remaining_fuel:
-    case 0n:
+# A hit ends the ascent: deeper links cannot beat the first common commit.
+def lca_fuel_left(is_common: Bool, fuel_left: Nat) -> Nat:
+  match is_common:
+    case True{}:
+      0n
+    case False{}:
+      fuel_left
+
+# Walks the second branch for the first ancestor-set hit. checker_fuel
+# decreases every level for the termination checker; gated_fuel carries the
+# early stop. Callers pass the same fuel twice.
+def find_first_common(+ancestor_set: List<&2, String>, checker_fuel: Nat, gated_fuel: Nat, +commit_identifier: String) -> Store.Op<&2, Maybe<&2, String>>:
+  match checker_fuel gated_fuel:
+    case 0n _:
       History.empty_text_maybe()
-    case 1n+fuel_left:
+    case 1n+checker_left 0n:
+      History.empty_text_maybe()
+    case 1n+checker_left 1n+gated_left:
       do Store.Op<&2, Maybe<&2, String>>:
         commit_maybe : Maybe<&2, History.Commit> <- History.load_commit(commit_identifier)
-        tail_result : Maybe<&2, String> <- find_first_common(ancestor_set, fuel_left, History.first_parent_text(commit_maybe))
+        +parent_text : String = History.first_parent_text(commit_maybe)
+        tail_result : Maybe<&2, String> <- find_first_common(ancestor_set, checker_left, lca_fuel_left(list_contains_member(commit_identifier, ancestor_set), gated_left), parent_text)
         return decide_lca_found(list_contains_member(commit_identifier, ancestor_set), commit_identifier, tail_result)
 
 # Emits the first side entry.
@@ -436,7 +449,7 @@ def branch_lca_search(lca_maybe: Maybe<&2, String>, +first_identifier: String, +
 def merge_with_ancestor_search(+first_identifier: String, +second_identifier: String) -> Store.Op<&2, MergeResult>:
   do Store.Op<&2, MergeResult>:
     ancestor_set : List<&2, String> <- collect_ancestors(10000n, Con{first_identifier, Nil{}}, Nil{})
-    lca_maybe : Maybe<&2, String> <- find_first_common(ancestor_set, 10000n, second_identifier)
+    lca_maybe : Maybe<&2, String> <- find_first_common(ancestor_set, 10000n, 10000n, second_identifier)
     merged_result : MergeResult <- branch_lca_search(lca_maybe, first_identifier, second_identifier)
     return merged_result
 
