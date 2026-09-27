@@ -54,3 +54,27 @@ The real algorithmic fix (sort once + linear merge instead of quadratic scans). 
 ## 6. Acceptance
 
 `bend PROOF.bend` green after every task (existing agreement laws pin behavior; new laws for new defs); `bolt` 0 errors; every bench table recorded in the plan doc Measurements section; `LAWS.bend` claims reviewed (worker writes, human reviews per standing delegation).
+
+## 7. Negative result: sort-merge infeasible in safe Bend (verified 2026-09-26)
+
+Attempted: sequential merge sort + linear two-pointer diff (Variant A), then
+adapted bitonic (Variant B). Variant A was written (~90 lines: merge_order /
+merge_dispatch / merge_by_key / sort_split_halves / sort_fuel /
+merge_sorted_diff chain) and REJECTED by the checker: "an unfilled law is a
+dead claim: live code cannot use it" — safe defs cannot call defs declared
+below them, so any helper matching a computed comparison cannot call back
+into the function that needs the branch result.
+
+The precise boundary: **recursion whose arguments depend on a computed
+comparison (conditional advance) is inexpressible** — this kills linear
+merge, recursive merge sort, binary search and trie lookup alike. Control
+case proving the rule: the bitonic demo COMPILES because its recursion is
+fixed-structure (every node visited unconditionally); comparisons only
+SELECT values through arguments (`pick`), never steer recursion. Same
+reason our membership diff compiles (full scans + value-select params).
+
+Consequences: the membership-diff shape is final in safe Bend; remaining
+levers are parallelism over fixed structure (Tasks 1–3) and constants.
+Sorting alone cannot help (membership is order-independent), so Variant B
+was never implemented — moot, not just expensive. This extends the
+inversion wall (spec §5.1) with a second language-expressiveness boundary.

@@ -179,13 +179,20 @@ Verdict: IMPROVED. Contention theory confirmed — fanned `user` dropped 229s→
 
 Verdict: crossover between 1k and 2k → threshold set to `2048n` (was `1024n`). No law pins the value (verified by rg). Note: the bench exercises direct paths; the threshold gates only the shell `compare_entries_auto` path, whose results are identical either way by the agreement laws — PROOF green confirms.
 
-### Epic results (fill on execution)
+### Epic results: sort-merge ABANDONED with evidence (2026-09-26)
 
 | Path | 1k wall | 10k wall | laws | lines |
 |---|---|---|---|---|
-| current | | | | |
-| merge-sort | | | | |
-| bitonic | | | | |
+| current (membership + 4-way) | 1.23s | 58.34s | 61 | — |
+| merge-sort | — | — | — | — (infeasible, see below) |
+| bitonic | — | — | — | — (moot, see below) |
+
+Verdict: NEITHER. Variant A (~90 lines written) rejected by the checker —
+conditional-advance recursion needs forward references, forbidden in safe
+Bend (spec §7). Variant B never implemented: bitonic compiles only through
+fixed-structure recursion, and sorting alone cannot speed an
+order-independent membership diff. Code reverted (`git checkout` of the 3
+files, working tree clean, PROOF green); knowledge kept in spec §7.
 
 ### Task 3 results 2026-09-26 (same session, native, 12 CPUs, `--threads 8`, fresh build with quad mode)
 
